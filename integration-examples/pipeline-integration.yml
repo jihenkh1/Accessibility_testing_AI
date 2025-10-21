@@ -1,0 +1,57 @@
+# Example: GitHub Actions Integration
+# Place this in your testing project's .github/workflows/
+
+name: Accessibility Testing + AI Analysis
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+jobs:
+  accessibility-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      # Run your existing accessibility tests
+      - name: Run Axe Tests
+        run: |
+          npm install
+          npm run test:accessibility
+      
+      # Send results to AI Dashboard
+      - name: Send to AI Dashboard
+        if: always()
+        env:
+          DASHBOARD_API_URL: ${{ secrets.DASHBOARD_API_URL }}
+          DASHBOARD_API_KEY: ${{ secrets.DASHBOARD_API_KEY }}
+        run: |
+          curl -X POST "${DASHBOARD_API_URL}/api/scans" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${DASHBOARD_API_KEY}" \
+            -d @./reports/axe-results.json \
+            -o response.json
+          
+          # Extract scan ID from response
+          SCAN_ID=$(jq -r '.scan_id' response.json)
+          echo "View results: ${DASHBOARD_API_URL}/scan/${SCAN_ID}"
+          
+          # Post comment to PR with dashboard link
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "🔍 Accessibility Analysis Complete: [View Dashboard](${DASHBOARD_API_URL}/scan/${SCAN_ID})"
+      
+      # Optional: Fail build if critical issues found
+      - name: Check Critical Issues
+        run: |
+          CRITICAL=$(jq -r '.summary.critical_issues' response.json)
+          if [ "$CRITICAL" -gt 0 ]; then
+            echo "::error::Found $CRITICAL critical accessibility issues"
+            exit 1
+          fi

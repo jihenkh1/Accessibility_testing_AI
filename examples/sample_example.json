@@ -1,0 +1,43 @@
+{
+  "violations": [
+    {
+      "id": "button-name",
+      "description": "Buttons must have discernible text",
+      "impact": "critical",
+      "nodes": [
+        {
+          "target": [".search-button", ".submit-btn", ".icon-button"],
+          "html": "<button class=\"search-button\"><span class=\"search-icon\"></span></button>"
+        }
+      ],
+      "tags": ["wcag2a", "wcag412"],
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.7/button-name"
+    },
+    {
+      "id": "image-alt",
+      "description": "Images must have alternate text",
+      "impact": "serious", 
+      "nodes": [
+        {
+          "target": ["img.hero-image", "img.product-thumbnail"],
+          "html": "<img src=\"hero.jpg\" class=\"hero-image\">"
+        }
+      ],
+      "tags": ["wcag2a", "wcag111"],
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.7/image-alt"
+    },
+    {
+      "id": "color-contrast",
+      "description": "Elements must have sufficient color contrast",
+      "impact": "serious",
+      "nodes": [
+        {
+          "target": [".primary-button", ".secondary-text"],
+          "html": "<button class=\"primary-button\" style=\"background: #3B82F6; color: #E5E7EB;\">Submit</button>"
+        }
+      ],
+      "tags": ["wcag2aa", "wcag1.4.3"],
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.7/color-contrast"
+    }
+  ]
+}

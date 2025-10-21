@@ -1,0 +1,155 @@
+# ==========================================
+# AI Assistant Project .gitignore
+# ==========================================
+
+# ==========================================
+# Python Environment & Dependencies
+# ==========================================
+.env
+.venv/
+.venv-1/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.coverage
+.pytest_cache/
+.mypy_cache/
+
+# ==========================================
+# Frontend (React/TypeScript/Vite)
+# ==========================================
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.production.local
+frontend/.eslintcache
+frontend/coverage/
+
+# Root-level Node.js (if any)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# ==========================================
+# Backend & API
+# ==========================================
+# FastAPI/Uvicorn logs
+*.log
+logs/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+data/*.sqlite
+data/*.db
+data/a11y_runs.sqlite
+
+# AI Cache
+ai_cache.sqlite
+*.cache
+
+# ==========================================
+# Build & Distribution
+# ==========================================
+build/
+dist/
+*.egg
+*.whl
+
+# Reflex (legacy)
+.web/
+.states/
+assets/external/
+
+# ==========================================
+# IDE & Editor Files
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ==========================================
+# OS Generated Files
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ==========================================
+# Testing & Reports
+# ==========================================
+test-report.json
+coverage/
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# ignore temporary scan results
+temp_scans/
+scan_results/
+
+# Temporary feedback/metrics data
+accessibility_metrics.json
+feedback.json
+
+# Migration scripts (temporary)
+migrate_*.py
+
+# Patch files
+*.diff
+*.patch
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Streamlit (if still used)
+.streamlit/
+
+# TypeScript
+*.tsbuildinfo
+
+# ESLint
+.eslintcache
+
+# Prettier
+.prettierignore
+
+# ==========================================
+# Deployment & Production
+# ==========================================
+.serverless/
+.vercel/
+.netlify/
+
+# Docker
+*.dockerignore
+docker-compose.override.yml
+
+# ==========================================
+# Secrets & Keys
+# ==========================================
+*.pem
+*.key
+*.cert
+.env.production
+.env.staging
+secrets/

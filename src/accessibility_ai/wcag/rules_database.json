@@ -1,0 +1,530 @@
+{
+  "button-name": {
+    "title": "Buttons must have discernible text",
+    "description": "Ensures buttons have discernible text that describes their purpose",
+    "wcag": ["4.1.2", "2.5.3"],
+    "wcag_level": "A",
+    "severity": "critical",
+    "impact_score": 95,
+    "user_impact": "Screen reader users cannot identify button purpose or action. Affects approximately 2.2% of users with vision disabilities.",
+    "common_causes": [
+      "Icon-only buttons without aria-label",
+      "Empty button elements",
+      "Non-semantic clickable elements"
+    ],
+    "fix_by_framework": {
+      "html": "<button aria-label=\"Search\">🔍</button>",
+      "react": "<button aria-label=\"Search\"><SearchIcon /></button>",
+      "vue": "<button :aria-label=\"$t('search')\"><Icon name=\"search\" /></button>",
+      "angular": "<button [attr.aria-label]=\"'Search'\"><mat-icon>search</mat-icon></button>",
+      "svelte": "<button aria-label=\"Search\"><Icon /></button>"
+    },
+    "explanation": "Add visible text content or aria-label attribute to describe the button's action",
+    "effort_minutes": 2,
+    "requires_ai": false
+  },
+  "image-alt": {
+    "title": "Images must have alternate text",
+    "description": "Ensures <img> elements have alternate text or role for decorative images",
+    "wcag": ["1.1.1"],
+    "wcag_level": "A",
+    "severity": "critical",
+    "impact_score": 90,
+    "user_impact": "Blind users relying on screen readers cannot understand image content. Affects 2.6 million+ screen reader users globally.",
+    "common_causes": [
+      "Missing alt attribute",
+      "Empty alt for meaningful images",
+      "Generic alt text like 'image'"
+    ],
+    "fix_by_framework": {
+      "html": "<img src=\"logo.png\" alt=\"Acme Company logo\">\n<!-- Decorative: -->\n<img src=\"divider.png\" alt=\"\" role=\"presentation\">",
+      "react": "<img src={logo} alt=\"Company logo\" />\n{/* Decorative: */}\n<img src={decoration} alt=\"\" role=\"presentation\" />",
+      "vue": "<img :src=\"logo\" :alt=\"$t('logo')\" />\n<!-- Decorative: -->\n<img :src=\"decoration\" alt=\"\" role=\"presentation\" />",
+      "angular": "<img [src]=\"logo\" [alt]=\"'Company logo'\">\n<!-- Decorative: -->\n<img [src]=\"decoration\" alt=\"\" role=\"presentation\">",
+      "svelte": "<img src={logo} alt=\"Company logo\" />"
+    },
+    "explanation": "Add descriptive alt attribute. Use empty alt=\"\" for decorative images",
+    "effort_minutes": 1,
+    "requires_ai": false
+  },
+  "color-contrast": {
+    "title": "Elements must have sufficient color contrast",
+    "description": "Ensures text and background colors meet WCAG contrast ratio requirements",
+    "wcag": ["1.4.3", "1.4.6"],
+    "wcag_level": "AA",
+    "severity": "serious",
+    "impact_score": 85,
+    "user_impact": "Users with low vision, color blindness, or viewing in bright sunlight cannot read text. Affects 8% of males and 0.5% of females.",
+    "common_causes": [
+      "Brand colors below 4.5:1 ratio",
+      "Light gray text on white",
+      "Disabled controls with low contrast"
+    ],
+    "fix_by_framework": {
+      "html": "/* Change from #999 (poor) to #595959 (good) */\ncolor: #595959;\nbackground: #ffffff;\n/* Ratio: 7.4:1 ✓ */",
+      "react": "/* Use Tailwind with good contrast */\n<p className=\"text-gray-900 bg-white\">Readable text</p>\n/* Ratio: 15.6:1 ✓ */",
+      "vue": "<p class=\"text-dark bg-light\">{{ content }}</p>\n/* .text-dark { color: #1a1a1a; } */\n/* .bg-light { background: #fff; } */",
+      "angular": "<p class=\"mat-body text-primary\">Content</p>\n/* Use Material colors with sufficient contrast */",
+      "svelte": "<p class=\"contrast-safe\">{text}</p>\n/* .contrast-safe { color: #333; } */"
+    },
+    "explanation": "Adjust colors to meet 4.5:1 ratio for normal text (3:1 for large text 18pt+)",
+    "effort_minutes": 5,
+    "requires_ai": true
+  },
+  "label": {
+    "title": "Form elements must have labels",
+    "description": "Ensures every form input has an associated label",
+    "wcag": ["1.3.1", "3.3.2", "4.1.2"],
+    "wcag_level": "A",
+    "severity": "critical",
+    "impact_score": 92,
+    "user_impact": "Screen reader users cannot identify form fields. Affects form completion and creates barriers for users with vision disabilities.",
+    "common_causes": [
+      "Input without <label>",
+      "Label not linked via for/id",
+      "Using placeholder as label"
+    ],
+    "fix_by_framework": {
+      "html": "<label for=\"email\">Email Address</label>\n<input type=\"email\" id=\"email\" name=\"email\">",
+      "react": "<label htmlFor=\"email\">Email</label>\n<input id=\"email\" type=\"email\" />",
+      "vue": "<label :for=\"fieldId\">{{ label }}</label>\n<input :id=\"fieldId\" v-model=\"value\" />",
+      "angular": "<mat-form-field>\n  <mat-label>Email</mat-label>\n  <input matInput type=\"email\" />\n</mat-form-field>",
+      "svelte": "<label for=\"email\">Email</label>\n<input id=\"email\" type=\"email\" bind:value />"
+    },
+    "explanation": "Add <label> element linked to input via for/id attributes",
+    "effort_minutes": 2,
+    "requires_ai": false
+  },
+  "link-name": {
+    "title": "Links must have discernible text",
+    "description": "Ensures links have descriptive text explaining their purpose",
+    "wcag": ["2.4.4", "4.1.2"],
+    "wcag_level": "A",
+    "severity": "serious",
+    "impact_score": 88,
+    "user_impact": "Screen reader users cannot understand link destinations. Affects navigation for users with vision disabilities.",
+    "common_causes": [
+      "Icon-only links",
+      "Empty anchor tags",
+      "Generic text like 'click here'"
+    ],
+    "fix_by_framework": {
+      "html": "<a href=\"/about\" aria-label=\"About our company\">\n  <img src=\"icon.svg\" alt=\"\" />\n</a>",
+      "react": "<Link to=\"/profile\" aria-label=\"View profile\">\n  <UserIcon />\n</Link>",
+      "vue": "<router-link to=\"/settings\" aria-label=\"Settings\">\n  <Icon name=\"settings\" />\n</router-link>",
+      "angular": "<a routerLink=\"/help\" aria-label=\"Get help\">\n  <mat-icon>help</mat-icon>\n</a>",
+      "svelte": "<a href=\"/profile\" aria-label=\"View profile\">\n  <Icon />\n</a>"
+    },
+    "explanation": "Add descriptive text or aria-label that explains link destination",
+    "effort_minutes": 3,
+    "requires_ai": false
+  },
+  "heading-order": {
+    "title": "Heading levels should increase by one",
+    "description": "Ensures heading tags follow logical hierarchy (h1 → h2 → h3)",
+    "wcag": ["1.3.1"],
+    "wcag_level": "A",
+    "severity": "moderate",
+    "impact_score": 70,
+    "user_impact": "Screen reader users cannot navigate page structure efficiently. Affects content comprehension.",
+    "common_causes": [
+      "Skipping heading levels",
+      "Using headings for styling",
+      "Multiple h1 tags"
+    ],
+    "fix_by_framework": {
+      "html": "<h1>Page Title</h1>\n<h2>Section</h2>\n<h3>Subsection</h3>",
+      "react": "<h1>{pageTitle}</h1>\n<section>\n  <h2>{sectionTitle}</h2>\n  <h3>{subsection}</h3>\n</section>",
+      "vue": "<h1>{{ title }}</h1>\n<section>\n  <h2>{{ section }}</h2>\n  <h3>{{ detail }}</h3>\n</section>",
+      "angular": "<h1>{{ title }}</h1>\n<section>\n  <h2>{{ section }}</h2>\n  <h3>{{ detail }}</h3>\n</section>",
+      "svelte": "<h1>{title}</h1>\n<section>\n  <h2>{section}</h2>\n  <h3>{detail}</h3>\n</section>"
+    },
+    "explanation": "Maintain sequential heading hierarchy without skipping levels",
+    "effort_minutes": 10,
+    "requires_ai": false
+  },
+  "duplicate-id": {
+    "title": "IDs must be unique",
+    "description": "Ensures every id attribute value is unique on the page",
+    "wcag": ["4.1.1"],
+    "wcag_level": "A",
+    "severity": "moderate",
+    "impact_score": 75,
+    "user_impact": "Assistive technologies may malfunction. Breaks form label associations and ARIA references.",
+    "common_causes": [
+      "Copying components without updating IDs",
+      "Server-side rendering duplicates",
+      "IDs in repeated list items"
+    ],
+    "fix_by_framework": {
+      "html": "<!-- Use unique IDs -->\n<div id=\"modal-1\">...</div>\n<div id=\"modal-2\">...</div>",
+      "react": "// Generate unique IDs\nconst id = useId(); // React 18+\n<div id={`modal-${id}`}>...</div>",
+      "vue": "<!-- Use component key for unique IDs -->\n<div :id=`item-${item.id}`>...</div>",
+      "angular": "<div [id]=\"'item-' + item.id\">...</div>",
+      "svelte": "<div id=\"modal-{uniqueId}\">...</div>"
+    },
+    "explanation": "Ensure each id attribute value is unique on the page",
+    "effort_minutes": 5,
+    "requires_ai": false
+  },
+  "html-has-lang": {
+    "title": "Page must have a language attribute",
+    "description": "Ensures <html> element has a lang attribute",
+    "wcag": ["3.1.1"],
+    "wcag_level": "A",
+    "severity": "serious",
+    "impact_score": 80,
+    "user_impact": "Screen readers cannot determine correct pronunciation. Affects all screen reader users.",
+    "common_causes": [
+      "Missing lang attribute on <html>",
+      "Invalid language code",
+      "Wrong language specified"
+    ],
+    "fix_by_framework": {
+      "html": "<html lang=\"en\">\n  <head>...</head>\n  <body>...</body>\n</html>",
+      "react": "// In index.html or app root\n<html lang=\"en\">...</html>\n// Or use Helmet\n<Helmet htmlAttributes={{ lang: 'en' }} />",
+      "vue": "<!-- In index.html -->\n<html lang=\"en\">...</html>\n<!-- Or in App.vue -->\n<component is=\"html\" :lang=\"$i18n.locale\" />",
+      "angular": "<!-- In index.html -->\n<html lang=\"en\">...</html>",
+      "svelte": "<!-- In app.html -->\n<html lang=\"en\">...</html>"
+    },
+    "explanation": "Add lang attribute to <html> tag with valid language code",
+    "effort_minutes": 1,
+    "requires_ai": false
+  },
+  "landmark-one-main": {
+    "title": "Page must have one main landmark",
+    "description": "Ensures page has exactly one main landmark",
+    "wcag": ["1.3.1"],
+    "wcag_level": "A",
+    "severity": "moderate",
+    "impact_score": 72,
+    "user_impact": "Screen reader users cannot quickly navigate to main content. Affects navigation efficiency.",
+    "common_causes": [
+      "No <main> element",
+      "Multiple <main> elements",
+      "Using divs instead of semantic HTML"
+    ],
+    "fix_by_framework": {
+      "html": "<body>\n  <header>...</header>\n  <main>\n    <h1>Main Content</h1>\n  </main>\n  <footer>...</footer>\n</body>",
+      "react": "<>\n  <Header />\n  <main>\n    <h1>{title}</h1>\n    {children}\n  </main>\n  <Footer />\n</>",
+      "vue": "<template>\n  <Header />\n  <main>\n    <slot />\n  </main>\n  <Footer />\n</template>",
+      "angular": "<app-header></app-header>\n<main>\n  <router-outlet></router-outlet>\n</main>\n<app-footer></app-footer>",
+      "svelte": "<Header />\n<main>\n  <slot />\n</main>\n<Footer />"
+    },
+    "explanation": "Add exactly one <main> element to wrap primary page content",
+    "effort_minutes": 3,
+    "requires_ai": false
+  },
+  "list": {
+    "title": "Lists must only contain list items",
+    "description": "Ensures <ul> and <ol> only contain <li> elements",
+    "wcag": ["1.3.1"],
+    "wcag_level": "A",
+    "severity": "moderate",
+    "impact_score": 65,
+    "user_impact": "Screen readers may announce incorrect list structure. Affects content comprehension.",
+    "common_causes": [
+      "Div or span directly in <ul>",
+      "Text nodes in list without <li>",
+      "Invalid nesting structure"
+    ],
+    "fix_by_framework": {
+      "html": "<!-- Bad -->\n<ul>\n  <div>Item</div>\n</ul>\n\n<!-- Good -->\n<ul>\n  <li>Item</li>\n</ul>",
+      "react": "<ul>\n  {items.map(item => (\n    <li key={item.id}>{item.name}</li>\n  ))}\n</ul>",
+      "vue": "<ul>\n  <li v-for=\"item in items\" :key=\"item.id\">\n    {{ item.name }}\n  </li>\n</ul>",
+      "angular": "<ul>\n  <li *ngFor=\"let item of items\">\n    {{ item.name }}\n  </li>\n</ul>",
+      "svelte": "<ul>\n  {#each items as item (item.id)}\n    <li>{item.name}</li>\n  {/each}\n</ul>"
+    },
+    "explanation": "Only place <li> elements directly inside <ul> or <ol>",
+    "effort_minutes": 3,
+    "requires_ai": false
+  },
+  "aria-required-attr": {
+    "title": "ARIA roles must have required attributes",
+    "description": "Ensures elements with ARIA roles have all required attributes",
+    "wcag": ["4.1.2"],
+    "wcag_level": "A",
+    "severity": "critical",
+    "impact_score": 88,
+    "user_impact": "Assistive technologies cannot properly interpret element purpose. Affects screen reader users.",
+    "common_causes": [
+      "checkbox without aria-checked",
+      "slider without aria-valuenow",
+      "combobox without aria-expanded"
+    ],
+    "fix_by_framework": {
+      "html": "<div role=\"checkbox\" aria-checked=\"false\">...</div>\n<div role=\"slider\" aria-valuenow=\"50\" aria-valuemin=\"0\" aria-valuemax=\"100\">...</div>",
+      "react": "<div role=\"checkbox\" aria-checked={checked}>...</div>\n<div role=\"slider\" aria-valuenow={value} aria-valuemin={0} aria-valuemax={100}>...</div>",
+      "vue": "<div role=\"checkbox\" :aria-checked=\"checked\">...</div>\n<div role=\"slider\" :aria-valuenow=\"value\" aria-valuemin=\"0\" aria-valuemax=\"100\">...</div>",
+      "angular": "<div role=\"checkbox\" [attr.aria-checked]=\"checked\">...</div>\n<div role=\"slider\" [attr.aria-valuenow]=\"value\" aria-valuemin=\"0\" aria-valuemax=\"100\">...</div>",
+      "svelte": "<div role=\"checkbox\" aria-checked={checked}>...</div>"
+    },
+    "explanation": "Add all required ARIA attributes for the specified role",
+    "effort_minutes": 3,
+    "requires_ai": false
+  },
+  "aria-valid-attr-value": {
+    "title": "ARIA attributes must have valid values",
+    "description": "Ensures ARIA attributes have values that are valid",
+    "wcag": ["4.1.2"],
+    "wcag_level": "A",
+    "severity": "serious",
+    "impact_score": 82,
+    "user_impact": "Invalid ARIA values cause assistive technologies to ignore or misinterpret elements.",
+    "common_causes": [
+      "aria-checked with invalid value",
+      "aria-expanded not true/false",
+      "Invalid ARIA role names"
+    ],
+    "fix_by_framework": {
+      "html": "<!-- Bad -->\n<button aria-expanded=\"yes\">Menu</button>\n\n<!-- Good -->\n<button aria-expanded=\"true\">Menu</button>",
+      "react": "<button aria-expanded={isOpen ? 'true' : 'false'}>Menu</button>\n{/* Or boolean */}\n<button aria-expanded={isOpen}>Menu</button>",
+      "vue": "<button :aria-expanded=\"isOpen.toString()\">Menu</button>",
+      "angular": "<button [attr.aria-expanded]=\"isOpen\">Menu</button>",
+      "svelte": "<button aria-expanded={isOpen}>Menu</button>"
+    },
+    "explanation": "Use valid values for ARIA attributes (true/false for booleans, valid role names, etc.)",
+    "effort_minutes": 2,
+    "requires_ai": false
+  },
+  "input-button-name": {
+    "title": "Input buttons must have discernible text",
+    "description": "Ensures input buttons have discernible text",
+    "wcag": ["4.1.2"],
+    "wcag_level": "A",
+    "severity": "critical",
+    "impact_score": 90,
+    "user_impact": "Screen reader users cannot identify the purpose of input buttons.",
+    "common_causes": [
+      "input type=button without value",
+      "input type=submit without value",
+      "Empty value attributes"
+    ],
+    "fix_by_framework": {
+      "html": "<input type=\"submit\" value=\"Submit Form\">\n<input type=\"button\" value=\"Cancel\" onclick=\"cancel()\">",
+      "react": "<input type=\"submit\" value=\"Submit\" />\n<input type=\"button\" value=\"Cancel\" onClick={handleCancel} />",
+      "vue": "<input type=\"submit\" :value=\"$t('submit')\" />\n<input type=\"button\" :value=\"$t('cancel')\" @click=\"cancel\" />",
+      "angular": "<input type=\"submit\" value=\"Submit\" />\n<input type=\"button\" value=\"Cancel\" (click)=\"cancel()\" />",
+      "svelte": "<input type=\"submit\" value=\"Submit\" />"
+    },
+    "explanation": "Add value attribute to input buttons with descriptive text",
+    "effort_minutes": 1,
+    "requires_ai": false
+  },
+  "select-name": {
+    "title": "Select elements must have labels",
+    "description": "Ensures select elements have an accessible name",
+    "wcag": ["4.1.2"],
+    "wcag_level": "A",
+    "severity": "critical",
+    "impact_score": 90,
+    "user_impact": "Screen reader users cannot identify the purpose of dropdown menus.",
+    "common_causes": [
+      "Select without label",
+      "Label not associated via for/id",
+      "Missing aria-label"
+    ],
+    "fix_by_framework": {
+      "html": "<label for=\"country\">Country</label>\n<select id=\"country\" name=\"country\">\n  <option>USA</option>\n</select>",
+      "react": "<label htmlFor=\"country\">Country</label>\n<select id=\"country\">\n  <option>USA</option>\n</select>",
+      "vue": "<label :for=\"id\">Country</label>\n<select :id=\"id\" v-model=\"selected\">\n  <option v-for=\"opt in options\" :key=\"opt\">{{ opt }}</option>\n</select>",
+      "angular": "<mat-form-field>\n  <mat-label>Country</mat-label>\n  <mat-select>\n    <mat-option value=\"usa\">USA</mat-option>\n  </mat-select>\n</mat-form-field>",
+      "svelte": "<label for=\"country\">Country</label>\n<select id=\"country\" bind:value={selected}>\n  <option>USA</option>\n</select>"
+    },
+    "explanation": "Add label element linked to select via for/id attributes",
+    "effort_minutes": 2,
+    "requires_ai": false
+  },
+  "meta-viewport": {
+    "title": "Page must have proper viewport meta tag",
+    "description": "Ensures viewport meta tag allows zooming for accessibility",
+    "wcag": ["1.4.4"],
+    "wcag_level": "AA",
+    "severity": "serious",
+    "impact_score": 78,
+    "user_impact": "Users with low vision cannot zoom page. Affects ability to read content.",
+    "common_causes": [
+      "user-scalable=no",
+      "maximum-scale=1",
+      "Missing viewport tag"
+    ],
+    "fix_by_framework": {
+      "html": "<!-- Bad -->\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, user-scalable=no\">\n\n<!-- Good -->\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+      "react": "// In index.html or Helmet\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />",
+      "vue": "<!-- In index.html -->\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+      "angular": "<!-- In index.html -->\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+      "svelte": "<!-- In app.html -->\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    },
+    "explanation": "Remove user-scalable=no and maximum-scale restrictions from viewport meta tag",
+    "effort_minutes": 1,
+    "requires_ai": false
+  },
+  "frame-title": {
+    "title": "Frames must have title attribute",
+    "description": "Ensures iframe and frame elements have a title",
+    "wcag": ["4.1.2"],
+    "wcag_level": "A",
+    "severity": "serious",
+    "impact_score": 85,
+    "user_impact": "Screen reader users cannot identify the purpose of embedded frames.",
+    "common_causes": [
+      "iframe without title",
+      "Empty title attribute",
+      "Generic titles like 'frame'"
+    ],
+    "fix_by_framework": {
+      "html": "<iframe src=\"map.html\" title=\"Location map\"></iframe>",
+      "react": "<iframe src=\"/embed\" title=\"Interactive chart\" />",
+      "vue": "<iframe :src=\"embedUrl\" :title=\"embedTitle\" />",
+      "angular": "<iframe [src]=\"embedUrl\" [title]=\"embedTitle\"></iframe>",
+      "svelte": "<iframe src={embedUrl} title={embedTitle} />"
+    },
+    "explanation": "Add descriptive title attribute to iframe elements",
+    "effort_minutes": 1,
+    "requires_ai": false
+  },
+  "document-title": {
+    "title": "Page must have a title",
+    "description": "Ensures document has a non-empty <title> element",
+    "wcag": ["2.4.2"],
+    "wcag_level": "A",
+    "severity": "serious",
+    "impact_score": 86,
+    "user_impact": "Users cannot identify page purpose. Affects navigation and bookmarking.",
+    "common_causes": [
+      "Missing <title> tag",
+      "Empty title",
+      "Generic title across all pages"
+    ],
+    "fix_by_framework": {
+      "html": "<head>\n  <title>Home - Acme Corp</title>\n</head>",
+      "react": "// Use React Helmet\n<Helmet>\n  <title>Home - Acme Corp</title>\n</Helmet>",
+      "vue": "// In component or router\nexport default {\n  metaInfo: {\n    title: 'Home - Acme Corp'\n  }\n}",
+      "angular": "// In component\nconstructor(private titleService: Title) {\n  this.titleService.setTitle('Home - Acme Corp');\n}",
+      "svelte": "<svelte:head>\n  <title>Home - Acme Corp</title>\n</svelte:head>"
+    },
+    "explanation": "Add descriptive <title> tag that identifies the page",
+    "effort_minutes": 2,
+    "requires_ai": false
+  },
+  "tabindex": {
+    "title": "Elements should not have tabindex greater than 0",
+    "description": "Ensures tabindex values are not greater than 0",
+    "wcag": ["2.4.3"],
+    "wcag_level": "A",
+    "severity": "serious",
+    "impact_score": 77,
+    "user_impact": "Keyboard users experience unpredictable tab order. Affects navigation.",
+    "common_causes": [
+      "tabindex=\"1\" or higher",
+      "Attempting to force tab order",
+      "Legacy code patterns"
+    ],
+    "fix_by_framework": {
+      "html": "<!-- Bad -->\n<div tabindex=\"1\">...</div>\n\n<!-- Good (use 0 or -1) -->\n<div tabindex=\"0\">...</div>\n<div tabindex=\"-1\">...</div>",
+      "react": "/* Use 0 for focusable, -1 for programmatic focus */\n<div tabIndex={0}>...</div>\n<div tabIndex={-1}>...</div>",
+      "vue": "<div :tabindex=\"0\">...</div>\n<div :tabindex=\"-1\">...</div>",
+      "angular": "<div [attr.tabindex]=\"0\">...</div>\n<div [attr.tabindex]=\"-1\">...</div>",
+      "svelte": "<div tabindex=\"0\">...</div>"
+    },
+    "explanation": "Remove positive tabindex values. Use 0 for focusable elements, -1 for programmatic focus only",
+    "effort_minutes": 2,
+    "requires_ai": false
+  },
+  "video-caption": {
+    "title": "Video elements must have captions",
+    "description": "Ensures video elements have captions",
+    "wcag": ["1.2.2"],
+    "wcag_level": "A",
+    "severity": "critical",
+    "impact_score": 93,
+    "user_impact": "Deaf and hard-of-hearing users cannot access video content. Affects 5% of population.",
+    "common_causes": [
+      "Video without <track> element",
+      "Missing captions file",
+      "Captions not synchronized"
+    ],
+    "fix_by_framework": {
+      "html": "<video controls>\n  <source src=\"video.mp4\" type=\"video/mp4\">\n  <track kind=\"captions\" src=\"captions.vtt\" srclang=\"en\" label=\"English\">\n</video>",
+      "react": "<video controls>\n  <source src={videoUrl} type=\"video/mp4\" />\n  <track kind=\"captions\" src={captionsUrl} srcLang=\"en\" label=\"English\" />\n</video>",
+      "vue": "<video controls>\n  <source :src=\"videoUrl\" type=\"video/mp4\">\n  <track kind=\"captions\" :src=\"captionsUrl\" srclang=\"en\" label=\"English\">\n</video>",
+      "angular": "<video controls>\n  <source [src]=\"videoUrl\" type=\"video/mp4\">\n  <track kind=\"captions\" [src]=\"captionsUrl\" srclang=\"en\" label=\"English\">\n</video>",
+      "svelte": "<video controls>\n  <source src={videoUrl} type=\"video/mp4\">\n  <track kind=\"captions\" src={captionsUrl} srclang=\"en\" label=\"English\">\n</video>"
+    },
+    "explanation": "Add <track> element with captions file to video elements",
+    "effort_minutes": 30,
+    "requires_ai": false
+  },
+  "definition-list": {
+    "title": "Definition lists must be structured properly",
+    "description": "Ensures <dl> elements only contain <dt> and <dd> elements",
+    "wcag": ["1.3.1"],
+    "wcag_level": "A",
+    "severity": "moderate",
+    "impact_score": 68,
+    "user_impact": "Screen readers may announce incorrect list structure.",
+    "common_causes": [
+      "Invalid elements in <dl>",
+      "Missing <dt> or <dd>",
+      "Incorrect nesting"
+    ],
+    "fix_by_framework": {
+      "html": "<dl>\n  <dt>Term</dt>\n  <dd>Definition</dd>\n</dl>",
+      "react": "<dl>\n  {items.map(item => (\n    <React.Fragment key={item.id}>\n      <dt>{item.term}</dt>\n      <dd>{item.definition}</dd>\n    </React.Fragment>\n  ))}\n</dl>",
+      "vue": "<dl>\n  <template v-for=\"item in items\" :key=\"item.id\">\n    <dt>{{ item.term }}</dt>\n    <dd>{{ item.definition }}</dd>\n  </template>\n</dl>",
+      "angular": "<dl>\n  <ng-container *ngFor=\"let item of items\">\n    <dt>{{ item.term }}</dt>\n    <dd>{{ item.definition }}</dd>\n  </ng-container>\n</dl>",
+      "svelte": "<dl>\n  {#each items as item (item.id)}\n    <dt>{item.term}</dt>\n    <dd>{item.definition}</dd>\n  {/each}\n</dl>"
+    },
+    "explanation": "Only place <dt> and <dd> elements directly inside <dl>",
+    "effort_minutes": 3,
+    "requires_ai": false
+  },
+  "object-alt": {
+    "title": "Object elements must have alternative text",
+    "description": "Ensures <object> elements have alternative text",
+    "wcag": ["1.1.1"],
+    "wcag_level": "A",
+    "severity": "serious",
+    "impact_score": 82,
+    "user_impact": "Screen reader users cannot access embedded object content.",
+    "common_causes": [
+      "Object without fallback content",
+      "Missing title or aria-label",
+      "Empty object elements"
+    ],
+    "fix_by_framework": {
+      "html": "<object data=\"chart.svg\" type=\"image/svg+xml\">\n  <p>Chart showing sales data for Q4</p>\n</object>",
+      "react": "<object data={chartUrl} type=\"image/svg+xml\">\n  <p>{fallbackText}</p>\n</object>",
+      "vue": "<object :data=\"chartUrl\" type=\"image/svg+xml\">\n  <p>{{ fallbackText }}</p>\n</object>",
+      "angular": "<object [data]=\"chartUrl\" type=\"image/svg+xml\">\n  <p>{{ fallbackText }}</p>\n</object>",
+      "svelte": "<object data={chartUrl} type=\"image/svg+xml\">\n  <p>{fallbackText}</p>\n</object>"
+    },
+    "explanation": "Add fallback content or alternative text to object elements",
+    "effort_minutes": 3,
+    "requires_ai": false
+  },
+  "area-alt": {
+    "title": "Image map areas must have alternative text",
+    "description": "Ensures <area> elements in image maps have alt text",
+    "wcag": ["1.1.1", "2.4.4"],
+    "wcag_level": "A",
+    "severity": "critical",
+    "impact_score": 87,
+    "user_impact": "Screen reader users cannot navigate image maps.",
+    "common_causes": [
+      "Area without alt attribute",
+      "Empty alt on clickable areas",
+      "Missing alt on hotspots"
+    ],
+    "fix_by_framework": {
+      "html": "<map name=\"planetmap\">\n  <area shape=\"circle\" coords=\"90,58,3\" href=\"mercury.html\" alt=\"Mercury\">\n  <area shape=\"circle\" coords=\"124,58,8\" href=\"venus.html\" alt=\"Venus\">\n</map>",
+      "react": "<map name=\"planetmap\">\n  <area shape=\"circle\" coords=\"90,58,3\" href=\"/mercury\" alt=\"Mercury\" />\n  <area shape=\"circle\" coords=\"124,58,8\" href=\"/venus\" alt=\"Venus\" />\n</map>",
+      "vue": "<map name=\"planetmap\">\n  <area v-for=\"area in areas\" :key=\"area.id\" :shape=\"area.shape\" :coords=\"area.coords\" :href=\"area.href\" :alt=\"area.alt\" />\n</map>",
+      "angular": "<map name=\"planetmap\">\n  <area *ngFor=\"let area of areas\" [shape]=\"area.shape\" [coords]=\"area.coords\" [href]=\"area.href\" [alt]=\"area.alt\">\n</map>",
+      "svelte": "<map name=\"planetmap\">\n  {#each areas as area (area.id)}\n    <area shape={area.shape} coords={area.coords} href={area.href} alt={area.alt} />\n  {/each}\n</map>"
+    },
+    "explanation": "Add descriptive alt attribute to all <area> elements in image maps",
+    "effort_minutes": 2,
+    "requires_ai": false
+  }
+}
