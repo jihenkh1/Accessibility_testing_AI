@@ -13,11 +13,10 @@ const shortcuts: Shortcut[] = [
   { keys: ['Esc'], description: 'Close dialog/modal', category: 'General' },
   { keys: ['g', 'h'], description: 'Go to Home', category: 'Navigation' },
   { keys: ['g', 'u'], description: 'Go to Upload', category: 'Navigation' },
-  { keys: ['g', 's'], description: 'Go to Scan', category: 'Navigation' },
   { keys: ['g', 'd'], description: 'Go to Dashboard', category: 'Navigation' },
   { keys: ['g', 'p'], description: 'Go to Pipeline', category: 'Navigation' },
   { keys: ['g', 'r'], description: 'Go to Runs', category: 'Navigation' },
-  { keys: ['n'], description: 'New scan', category: 'Actions' },
+  { keys: ['n'], description: 'Upload new report', category: 'Actions' },
   { keys: ['t'], description: 'Toggle theme', category: 'Actions' },
   { keys: ['b'], description: 'Toggle sidebar', category: 'Actions' },
 ]
@@ -145,7 +144,6 @@ export function KeyboardShortcutsProvider({
       // Navigation shortcuts
       if (seq === 'gh') { onNavigate('home'); setKeySequence([]) }
       else if (seq === 'gu') { onNavigate('upload'); setKeySequence([]) }
-      else if (seq === 'gs') { onNavigate('scan'); setKeySequence([]) }
       else if (seq === 'gd') { onNavigate('dashboard'); setKeySequence([]) }
       else if (seq === 'gp') { onNavigate('pipeline'); setKeySequence([]) }
       else if (seq === 'gr') { onNavigate('runs'); setKeySequence([]) }

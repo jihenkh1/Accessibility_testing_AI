@@ -50,16 +50,7 @@ class ScanSummary(BaseModel):
     trend: Optional[float] = None
 
 
-class ScanUrlRequest(BaseModel):
-    url: str
-    framework: str = Field(default="html")
-    use_ai: bool = True
-    max_ai_issues: Optional[int] = 50
-    max_pages: int = 20
-    same_origin_only: bool = True
-    scanner: str = Field(default="axe", description="axe|pa11y")  # NEW: Choose scanning engine
-
-
 class IssuesPage(BaseModel):
     items: List[IssueOut]
     total: int
+

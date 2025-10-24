@@ -10,7 +10,6 @@ type Props = { children: ReactNode }
 const routeMap: Record<string, string> = {
   home: '/home',
   upload: '/upload',
-  scan: '/scan',
   dashboard: '/dashboard',
   runs: '/runs',
   settings: '/settings',
@@ -20,7 +19,6 @@ const routeMap: Record<string, string> = {
 function pageFromPath(pathname: string): string {
   if (pathname.startsWith('/upload')) return 'upload'
   if (pathname.startsWith('/scan/')) return 'runs'
-  if (pathname.startsWith('/scan')) return 'scan'
   if (pathname.startsWith('/dashboard')) return 'dashboard'
   if (pathname.startsWith('/runs')) return 'runs'
   if (pathname.startsWith('/pipeline')) return 'pipeline'
@@ -63,7 +61,7 @@ export function AppShell({ children }: Props) {
       onToggleSidebar={() => {
         window.dispatchEvent(new CustomEvent('toggle-sidebar'))
       }}
-      onNewScan={() => navigate('/scan')}
+      onNewScan={() => navigate('/upload')}
     >
       <div className="min-h-screen bg-background text-foreground flex">
         <AppSidebar

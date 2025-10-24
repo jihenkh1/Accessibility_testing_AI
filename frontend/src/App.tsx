@@ -6,7 +6,6 @@ import { AppShell } from './components/AppShell'
 // Code-split heavy pages
 const Home = lazy(() => import('./pages/HomeNew'))
 const UploadScan = lazy(() => import('./pages/UploadNew'))
-const ScanNew = lazy(() => import('./pages/ScanNew'))
 const Dashboard = lazy(() => import('./pages/DashboardNew'))
 const ScanDetail = lazy(() => import('./pages/ScanDetail'))
 const RunIssues = lazy(() => import('./pages/RunIssues'))
@@ -21,7 +20,6 @@ export default function App() {
           <Route path="/" element={<Navigate to="/home" replace />} />
           <Route path="/home" element={<Home />} />
           <Route path="/upload" element={<UploadScan />} />
-          <Route path="/scan" element={<ScanNew />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/runs" element={<Runs />} />
           <Route path="/scan/:id" element={<ScanDetail />} />

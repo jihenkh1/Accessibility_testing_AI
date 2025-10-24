@@ -20,26 +20,7 @@ def analyze_report(
     use_ai: bool = True,
     max_ai_issues: Optional[int] = 50,
     url: str = "api_request",
-    scanner: str = "axe",  # NEW: scanner type
 ) -> Dict[str, Any]:
-    # Convert Pa11y format to unified format if needed
-    if scanner == "pa11y":
-        from src.accessibility_ai.adapters.pa11y_adapter import parse_pa11y_report
-        # Parse Pa11y results and convert to axe-like format for analyzer
-        issues_list = parse_pa11y_report(report)
-        # Convert back to axe-like violations structure
-        report = {
-            "violations": [
-                {
-                    "id": issue.id,
-                    "description": issue.description,
-                    "impact": issue.impact,
-                    "nodes": [{"target": issue.elements, "html": getattr(issue, "html", "")}]
-                }
-                for issue in issues_list
-            ]
-        }
-    
     analyzer = AccessibilityAnalyzer(use_ai=use_ai, max_ai_issues=max_ai_issues)
     enhanced = analyzer.analyze_issues(raw_report=report, url=url, framework=framework)
 

@@ -319,12 +319,6 @@ result = client.send_report(
     use_ai=True,
     max_ai_issues=50
 )
-
-# Or scan a live URL
-result = client.scan_url(
-    url="https://yoursite.com",
-    max_pages=20
-)
 ```
 
 **Pytest Integration:**
@@ -484,9 +478,11 @@ if current['summary']['total_issues'] > prev['total_issues']:
 environments = ['dev', 'staging', 'prod']
 
 for env in environments:
-    result = client.scan_url(
-        url=f"https://{env}.yoursite.com",
-        max_pages=10
+    # Generate report for each environment and upload
+    report_path = f"./reports/{env}-axe.json"
+    result = client.send_report(
+        report_path=report_path,
+        project_name=f"yoursite-{env}"
     )
     print(f"{env}: {result['summary']['total_issues']} issues")
 ```

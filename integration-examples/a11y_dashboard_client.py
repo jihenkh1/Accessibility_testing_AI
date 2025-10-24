@@ -121,54 +121,6 @@ class A11yDashboardClient:
         
         return result
     
-    def scan_url(
-        self,
-        url: str,
-        max_pages: int = 10,
-        same_origin_only: bool = True,
-        framework: str = "axe",
-        use_ai: bool = True,
-        max_ai_issues: int = 50
-    ) -> Dict[str, Any]:
-        """
-        Trigger a live URL scan via the dashboard's crawler
-        
-        Args:
-            url: URL to scan
-            max_pages: Maximum number of pages to crawl
-            same_origin_only: Only crawl pages on same domain
-            framework: Testing framework to use
-            use_ai: Whether to use AI enhancement
-            max_ai_issues: Maximum issues to enhance with AI
-            
-        Returns:
-            Dict with scan results and dashboard URL
-        """
-        payload = {
-            "url": url,
-            "max_pages": max_pages,
-            "same_origin_only": same_origin_only,
-            "framework": framework,
-            "use_ai": use_ai,
-            "max_ai_issues": max_ai_issues
-        }
-        
-        print(f"🔍 Scanning {url} (max {max_pages} pages)...")
-        
-        response = self.session.post(
-            f"{self.api_url}/api/scans/scan_url",
-            json=payload,
-            timeout=self.timeout * 3  # Longer timeout for crawling
-        )
-        response.raise_for_status()
-        
-        result = response.json()
-        scan_id = result.get('scan_id')
-        result['dashboard_url'] = f"{self.api_url}/scan/{scan_id}"
-        
-        print(f"✅ Scan complete: {result['dashboard_url']}")
-        return result
-    
     def get_scan(self, scan_id: int) -> Dict[str, Any]:
         """Get details of a previous scan"""
         response = self.session.get(

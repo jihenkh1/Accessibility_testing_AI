@@ -20,7 +20,6 @@ export function AppSidebar({ currentPage, onPageChange, collapsed, onCollapsedCh
   const menu = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'upload', label: 'Upload', icon: Upload },
-    { id: 'scan', label: 'Scan', icon: Scan },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'pipeline', label: 'Pipeline', icon: GitBranch, badge: 'New' },
     { id: 'runs', label: 'Runs', icon: History },

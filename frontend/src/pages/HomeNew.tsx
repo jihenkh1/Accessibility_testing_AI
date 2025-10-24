@@ -7,7 +7,6 @@ export default function HomeNew() {
     const map: Record<string,string> = {
       home: '/home',
       upload: '/upload',
-      scan: '/scan',
       dashboard: '/dashboard',
       runs: '/dashboard',
       'scan-detail': '/dashboard',

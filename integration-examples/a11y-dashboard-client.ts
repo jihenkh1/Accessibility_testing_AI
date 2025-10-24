@@ -97,46 +97,6 @@ export class A11yDashboardClient {
   }
 
   /**
-   * Trigger a live URL scan
-   */
-  async scanUrl(options: {
-    url: string
-    maxPages?: number
-    sameOriginOnly?: boolean
-    framework?: 'axe' | 'pa11y'
-    useAI?: boolean
-    maxAIIssues?: number
-  }): Promise<ScanResult> {
-    const {
-      url,
-      maxPages = 10,
-      sameOriginOnly = true,
-      framework = 'axe',
-      useAI = true,
-      maxAIIssues = 50
-    } = options
-
-    console.log(`🔍 Scanning ${url} (max ${maxPages} pages)...`)
-
-    const response = await this.client.post<ScanResult>('/api/scans/scan_url', {
-      url,
-      max_pages: maxPages,
-      same_origin_only: sameOriginOnly,
-      framework,
-      use_ai: useAI,
-      max_ai_issues: maxAIIssues
-    }, {
-      timeout: 90000 // Longer timeout for crawling
-    })
-
-    const result = response.data
-    result.dashboard_url = `${this.client.defaults.baseURL}/scan/${result.scan_id}`
-    
-    console.log(`✅ Scan complete: ${result.dashboard_url}`)
-    return result
-  }
-
-  /**
    * Get details of a previous scan
    */
   async getScan(scanId: number) {

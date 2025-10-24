@@ -156,6 +156,7 @@ const ScanCard = ({ scan }: { scan: Scan }) => {
 }
 
 export default function Runs() {
+  const navigate = useNavigate()
   const { data: scans, isLoading, error } = useQuery({
     queryKey: ['scans'],
     queryFn: async () => {
@@ -221,9 +222,9 @@ export default function Runs() {
       ) : (
         <Card>
           <CardContent className="p-12 text-center">
-            <div className="text-muted-foreground mb-4">No scans yet</div>
-            <Button onClick={() => window.location.href = '/scan'}>
-              Run Your First Scan
+            <div className="text-muted-foreground mb-4">No scans yet. Upload a report to get started.</div>
+            <Button onClick={() => navigate('/upload')}>
+              Upload Report
             </Button>
           </CardContent>
         </Card>

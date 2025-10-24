@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from backend.schemas import AnalyzeRequest, AnalyzeResponse, ScanSummary, ScanUrlRequest, IssuesPage, IssueOut
+from backend.schemas import AnalyzeRequest, AnalyzeResponse, ScanSummary, IssuesPage, IssueOut
 from backend.services.analyze import analyze_report
 from backend.services import db as dbsvc
 
@@ -225,61 +225,6 @@ def get_scan(scan_id: int) -> ScanSummary:
     if not row:
         raise HTTPException(status_code=404, detail="Scan not found")
     return ScanSummary(**row)
-
-
-@router.post("/scans/scan_url", response_model=AnalyzeResponse)
-def scan_url(req: ScanUrlRequest) -> AnalyzeResponse:
-    """Crawl a site (limited pages), run accessibility scanner, analyze, and store summary."""
-    # Lazy import to avoid heavy deps at module import time
-    aggregated = None
-    try:
-        if req.scanner == "pa11y":
-            # Use Pa11y scanner
-            from src.accessibility_ai.crawler.pa11y_scanner import (
-                check_pa11y_installed,
-                get_installation_instructions,
-                scan_url_sync
-            )
-            
-            # Check if Pa11y is installed
-            if not check_pa11y_installed():
-                instructions = get_installation_instructions()
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Pa11y not installed. {instructions}"
-                )
-            
-            # Scan with Pa11y
-            aggregated = scan_url_sync(req.url, runner="axe")
-            
-        else:
-            # Use default axe-core scanner
-            from src.accessibility_ai.crawler.scan_site import scan_site
-            aggregated = scan_site(req.url, max_pages=int(req.max_pages), same_origin_only=bool(req.same_origin_only))
-            
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Scanner error: {exc}")
-
-    result = analyze_report(
-        report=aggregated,
-        framework=req.framework,
-        use_ai=req.use_ai,
-        max_ai_issues=req.max_ai_issues,
-        url=req.url,
-        scanner=req.scanner,  # Pass scanner type to analyzer
-    )
-    summary = result["summary"]
-    issues = result["issues"]
-    ts_iso = datetime.now(timezone.utc).isoformat()
-    try:
-        scan_id = dbsvc.insert_run_returning_id(DB_PATH, summary, req.url, req.framework, ts_iso)
-        if scan_id:
-            dbsvc.insert_run_issues(DB_PATH, scan_id, issues)
-    except Exception:
-        scan_id = None
-    return AnalyzeResponse(scan_id=scan_id, summary=summary, issues=issues)
 
 
 @router.get("/scans/{scan_id}/issues", response_model=IssuesPage)

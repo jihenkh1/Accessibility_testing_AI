@@ -110,24 +110,6 @@ try {
 }
 ```
 
-### Use Case 4: Live URL Scanning
-```python
-# Python
-result = client.scan_url(
-    url="https://yoursite.com",
-    max_pages=20,
-    same_origin_only=True
-)
-```
-
-```typescript
-// TypeScript
-const result = await client.scanUrl({
-  url: 'https://yoursite.com',
-  maxPages: 20
-})
-```
-
 ## 🔧 Customization
 
 ### Add Custom Headers
