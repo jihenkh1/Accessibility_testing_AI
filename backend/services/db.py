@@ -34,6 +34,39 @@ CREATE TABLE IF NOT EXISTS run_issues (
   status TEXT DEFAULT 'todo',
   FOREIGN KEY(run_id) REFERENCES run_summaries(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS manual_checklists (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  page_type TEXT NOT NULL,
+  components TEXT NOT NULL,
+  checklist_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS test_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id INTEGER,
+  checklist_id INTEGER NOT NULL,
+  tester_name TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  status TEXT DEFAULT 'in-progress',
+  FOREIGN KEY(run_id) REFERENCES run_summaries(id) ON DELETE SET NULL,
+  FOREIGN KEY(checklist_id) REFERENCES manual_checklists(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS manual_test_results (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL,
+  checklist_id INTEGER NOT NULL,
+  item_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  notes TEXT,
+  screenshot_path TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(session_id) REFERENCES test_sessions(id) ON DELETE CASCADE,
+  FOREIGN KEY(checklist_id) REFERENCES manual_checklists(id) ON DELETE CASCADE
+);
 """
 
 
@@ -340,5 +373,217 @@ def get_status_summary(db_path: Path, run_id: int) -> Dict[str, int]:
                 result[status] = count
         
         return result
+    finally:
+        con.close()
+
+
+# Manual Testing Functions
+
+def insert_checklist(db_path: Path, page_type: str, components: str, checklist_json: str, created_at: str) -> int:
+    """Insert a new manual testing checklist."""
+    con = _connect(db_path)
+    try:
+        cur = con.execute(
+            """
+            INSERT INTO manual_checklists (page_type, components, checklist_json, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (page_type, components, checklist_json, created_at),
+        )
+        con.commit()
+        row_id = cur.lastrowid
+        if row_id is None:
+            raise ValueError("Failed to insert checklist")
+        return int(row_id)
+    finally:
+        con.close()
+
+
+def get_checklist(db_path: Path, checklist_id: int) -> Optional[Dict[str, Any]]:
+    """Get a checklist by ID."""
+    con = _connect(db_path)
+    try:
+        row = con.execute(
+            "SELECT id, page_type, components, checklist_json, created_at FROM manual_checklists WHERE id = ?",
+            (checklist_id,),
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "page_type": row[1],
+            "components": row[2],
+            "checklist_json": row[3],
+            "created_at": row[4],
+        }
+    finally:
+        con.close()
+
+
+def create_test_session(db_path: Path, checklist_id: int, tester_name: str, started_at: str, run_id: Optional[int] = None) -> int:
+    """Create a new test session."""
+    con = _connect(db_path)
+    try:
+        cur = con.execute(
+            """
+            INSERT INTO test_sessions (run_id, checklist_id, tester_name, started_at, status)
+            VALUES (?, ?, ?, ?, 'in-progress')
+            """,
+            (run_id, checklist_id, tester_name, started_at),
+        )
+        con.commit()
+        row_id = cur.lastrowid
+        if row_id is None:
+            raise ValueError("Failed to create session")
+        return int(row_id)
+    finally:
+        con.close()
+
+
+def get_test_session(db_path: Path, session_id: int) -> Optional[Dict[str, Any]]:
+    """Get a test session by ID."""
+    con = _connect(db_path)
+    try:
+        row = con.execute(
+            "SELECT id, run_id, checklist_id, tester_name, started_at, completed_at, status FROM test_sessions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "run_id": row[1],
+            "checklist_id": row[2],
+            "tester_name": row[3],
+            "started_at": row[4],
+            "completed_at": row[5],
+            "status": row[6],
+        }
+    finally:
+        con.close()
+
+
+def list_test_sessions(db_path: Path, limit: int = 50) -> List[Dict[str, Any]]:
+    """List all test sessions."""
+    con = _connect(db_path)
+    try:
+        rows = con.execute(
+            "SELECT id, run_id, checklist_id, tester_name, started_at, completed_at, status FROM test_sessions ORDER BY started_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [
+            {
+                "id": row[0],
+                "run_id": row[1],
+                "checklist_id": row[2],
+                "tester_name": row[3],
+                "started_at": row[4],
+                "completed_at": row[5],
+                "status": row[6],
+            }
+            for row in rows
+        ]
+    finally:
+        con.close()
+
+
+def update_test_session(db_path: Path, session_id: int, completed_at: Optional[str] = None, status: Optional[str] = None) -> bool:
+    """Update a test session."""
+    con = _connect(db_path)
+    try:
+        updates = []
+        params: List[Any] = []
+        if completed_at is not None:
+            updates.append("completed_at = ?")
+            params.append(completed_at)
+        if status is not None:
+            updates.append("status = ?")
+            params.append(status)
+        
+        if not updates:
+            return False
+        
+        params.append(session_id)
+        cursor = con.execute(
+            f"UPDATE test_sessions SET {', '.join(updates)} WHERE id = ?",
+            params
+        )
+        con.commit()
+        return cursor.rowcount > 0
+    finally:
+        con.close()
+
+
+def insert_test_result(db_path: Path, session_id: int, checklist_id: int, item_id: str, status: str, notes: Optional[str], screenshot_path: Optional[str], created_at: str) -> int:
+    """Insert a manual test result."""
+    con = _connect(db_path)
+    try:
+        cur = con.execute(
+            """
+            INSERT INTO manual_test_results (session_id, checklist_id, item_id, status, notes, screenshot_path, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (session_id, checklist_id, item_id, status, notes, screenshot_path, created_at),
+        )
+        con.commit()
+        row_id = cur.lastrowid
+        if row_id is None:
+            raise ValueError("Failed to insert test result")
+        return int(row_id)
+    finally:
+        con.close()
+
+
+def get_session_results(db_path: Path, session_id: int) -> List[Dict[str, Any]]:
+    """Get all test results for a session."""
+    con = _connect(db_path)
+    try:
+        rows = con.execute(
+            "SELECT id, session_id, checklist_id, item_id, status, notes, screenshot_path, created_at FROM manual_test_results WHERE session_id = ? ORDER BY created_at",
+            (session_id,),
+        ).fetchall()
+        return [
+            {
+                "id": row[0],
+                "session_id": row[1],
+                "checklist_id": row[2],
+                "item_id": row[3],
+                "status": row[4],
+                "notes": row[5],
+                "screenshot_path": row[6],
+                "created_at": row[7],
+            }
+            for row in rows
+        ]
+    finally:
+        con.close()
+
+
+def update_test_result(db_path: Path, result_id: int, status: Optional[str] = None, notes: Optional[str] = None, screenshot_path: Optional[str] = None) -> bool:
+    """Update a test result."""
+    con = _connect(db_path)
+    try:
+        updates = []
+        params: List[Any] = []
+        if status is not None:
+            updates.append("status = ?")
+            params.append(status)
+        if notes is not None:
+            updates.append("notes = ?")
+            params.append(notes)
+        if screenshot_path is not None:
+            updates.append("screenshot_path = ?")
+            params.append(screenshot_path)
+        
+        if not updates:
+            return False
+        
+        params.append(result_id)
+        cursor = con.execute(
+            f"UPDATE manual_test_results SET {', '.join(updates)} WHERE id = ?",
+            params
+        )
+        con.commit()
+        return cursor.rowcount > 0
     finally:
         con.close()

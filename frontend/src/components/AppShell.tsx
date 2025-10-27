@@ -14,6 +14,7 @@ const routeMap: Record<string, string> = {
   runs: '/runs',
   settings: '/settings',
   pipeline: '/pipeline',
+  'manual-testing': '/manual-testing/sessions',
 }
 
 function pageFromPath(pathname: string): string {
@@ -23,6 +24,7 @@ function pageFromPath(pathname: string): string {
   if (pathname.startsWith('/runs')) return 'runs'
   if (pathname.startsWith('/pipeline')) return 'pipeline'
   if (pathname.startsWith('/settings')) return 'settings'
+  if (pathname.startsWith('/manual-testing')) return 'manual-testing'
   if (pathname.startsWith('/home')) return 'home'
   return 'home'
 }

@@ -228,19 +228,48 @@ class AccessibilityAnalyzer:
         """
         Extract standardized `AccessibilityIssue` objects from various report formats.
         Supports axe-core (`violations`) and Pa11y (`issues`) formats.
+        Handles multi-tool reports (e.g., both axe-core and Pa11y in same report).
         """
         issues: List[AccessibilityIssue] = []
 
-        # Axe-core format (use adapter)
+        # Check if violations are nested inside an 'axe-core' or similar key
+        if "axe-core" in raw_report and isinstance(raw_report["axe-core"], dict):
+            # Extract from nested axe-core object
+            axe_data = raw_report["axe-core"]
+            if isinstance(axe_data.get("violations"), list):
+                issues.extend(parse_axe_report(axe_data))
+            # Also check for incomplete issues (treat them as violations)
+            if isinstance(axe_data.get("incomplete"), list) and axe_data["incomplete"]:
+                # Create a temporary report with incomplete as violations
+                incomplete_report = {"violations": axe_data["incomplete"]}
+                issues.extend(parse_axe_report(incomplete_report))
+            # Don't return here - continue to check for Pa11y data
+
+        # Axe-core format (use adapter) - top level violations
         if isinstance(raw_report.get("violations"), list):
             issues.extend(parse_axe_report(raw_report))
+        
+        # Also check for top-level incomplete issues
+        if isinstance(raw_report.get("incomplete"), list) and raw_report["incomplete"]:
+            incomplete_report = {"violations": raw_report["incomplete"]}
+            issues.extend(parse_axe_report(incomplete_report))
 
-        # Pa11y format
+        # Pa11y format - check nested pa11y key first
+        if "pa11y" in raw_report:
+            pa11y_data = raw_report["pa11y"]
+            # Pa11y might be nested with 'issues' key
+            if isinstance(pa11y_data, dict) and isinstance(pa11y_data.get("issues"), list):
+                issues.extend(parse_pa11y_report(pa11y_data))
+            # Pa11y data might be directly a list of issues
+            elif isinstance(pa11y_data, list):
+                issues.extend(parse_pa11y_report({"issues": pa11y_data}))
+        
+        # Top-level Pa11y issues (if not already processed)
         elif isinstance(raw_report.get("issues"), list):
             issues.extend(parse_pa11y_report(raw_report))
 
         # Generic fallback: detect lists of dicts with id/description/impact
-        else:
+        if not issues:
             for _, value in raw_report.items():
                 if isinstance(value, list) and value and isinstance(value[0], dict):
                     sample = value[0]

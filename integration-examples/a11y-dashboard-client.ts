@@ -1,6 +1,3 @@
-// TypeScript/JavaScript SDK for AI Accessibility Dashboard
-// Install: npm install axios
-
 import axios, { AxiosInstance } from 'axios'
 import * as fs from 'fs'
 

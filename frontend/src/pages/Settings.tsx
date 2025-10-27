@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { ThemeShowcase } from '../components/ThemeShowcase'
 import { AIStatsSection } from '../components/AIStatsSection'
 import { applyTheme, getStoredTheme } from '../utils/themes'
@@ -9,9 +10,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Palette, Sparkles } from 'lucide-react'
 
 export default function Settings() {
+  const [searchParams] = useSearchParams()
   const stored = getStoredTheme()
   const [dark, setDark] = useState(stored.isDark)
   const [themeName, setThemeName] = useState(stored.themeName)
+  
+  // Get initial tab from URL or default to 'appearance'
+  const initialTab = searchParams.get('tab') || 'appearance'
 
   useEffect(() => {
     applyTheme(themeName, dark)
@@ -24,7 +29,7 @@ export default function Settings() {
         <p className="text-muted-foreground">Manage your application preferences and AI features</p>
       </div>
 
-      <Tabs defaultValue="appearance" className="w-full">
+      <Tabs defaultValue={initialTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
           <TabsTrigger value="appearance" className="gap-2">
             <Palette className="h-4 w-4" />

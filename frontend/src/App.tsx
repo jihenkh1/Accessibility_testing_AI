@@ -11,6 +11,12 @@ const ScanDetail = lazy(() => import('./pages/ScanDetail'))
 const RunIssues = lazy(() => import('./pages/RunIssues'))
 const Pipeline = lazy(() => import('./pages/Pipeline'))
 const Runs = lazy(() => import('./pages/Runs'))
+const ManualTestingNew = lazy(() => import('./pages/ManualTestingNew'))
+const ManualTestingSessions = lazy(() => import('./pages/ManualTestingSessions'))
+const SessionResults = lazy(() => import('./pages/SessionResults'))
+
+// Import TestRecorder directly (not lazy) since it's needed immediately
+import { TestRecorder } from './components/TestRecorder'
 
 export default function App() {
   return (
@@ -26,6 +32,10 @@ export default function App() {
           <Route path="/scan/:id/issues" element={<RunIssues />} />
           <Route path="/pipeline" element={<Pipeline />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/manual-testing/new" element={<ManualTestingNew />} />
+          <Route path="/manual-testing/sessions" element={<ManualTestingSessions />} />
+          <Route path="/manual-testing/session/:sessionId" element={<TestRecorder />} />
+          <Route path="/manual-testing/results/:sessionId" element={<SessionResults />} />
         </Routes>
       </Suspense>
     </AppShell>

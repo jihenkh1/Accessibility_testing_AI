@@ -54,3 +54,80 @@ class IssuesPage(BaseModel):
     items: List[IssueOut]
     total: int
 
+
+# Manual Testing Schemas
+
+class ChecklistItem(BaseModel):
+    id: str
+    category: str
+    # Legacy fields (for backward compatibility)
+    title: Optional[str] = None
+    description: Optional[str] = None
+    wcag: Optional[str] = None
+    # New actionable fields
+    test_item: Optional[str] = None  # Specific action to perform
+    how_to_test: Optional[str] = None  # Step-by-step instructions
+    what_to_look_for: Optional[str] = None  # Success criteria
+    wcag_reference: Optional[str] = None  # WCAG guideline reference
+    priority: str
+    estimated_time: Optional[int] = None  # Time estimate in minutes
+
+
+class ChecklistGenerateRequest(BaseModel):
+    page_type: str = Field(description="landing, form, dashboard, or ecommerce")
+    components: List[str] = Field(default=[], description="List of component names")
+    run_id: Optional[int] = Field(default=None, description="Optional: link to existing scan run")
+
+
+class ChecklistResponse(BaseModel):
+    checklist_id: int
+    page_type: str
+    components: List[str]
+    total_items: int
+    categories: List[str]
+    priority_counts: Dict[str, int]
+    estimated_minutes: int
+    items: List[ChecklistItem]
+    created_at: str
+
+
+class TestSessionCreate(BaseModel):
+    checklist_id: int
+    tester_name: str
+    run_id: Optional[int] = None
+
+
+class TestSessionResponse(BaseModel):
+    id: int
+    run_id: Optional[int]
+    checklist_id: int
+    tester_name: str
+    started_at: str
+    completed_at: Optional[str]
+    status: str
+
+
+class TestResultRecord(BaseModel):
+    session_id: int
+    item_id: str
+    status: str = Field(description="passed, failed, needs_retest, skipped")
+    notes: Optional[str] = None
+
+
+class TestResultResponse(BaseModel):
+    id: int
+    session_id: int
+    checklist_id: int
+    item_id: str
+    status: str
+    notes: Optional[str]
+    screenshot_path: Optional[str]
+    created_at: str
+
+
+class SessionResultsSummary(BaseModel):
+    session: TestSessionResponse
+    checklist: ChecklistResponse
+    results: List[TestResultResponse]
+    progress: Dict[str, int]  # passed, failed, needs_retest, skipped counts
+

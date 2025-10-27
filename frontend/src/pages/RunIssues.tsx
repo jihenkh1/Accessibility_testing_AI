@@ -353,8 +353,8 @@ export default function RunIssues() {
                 </label>
               ))}
             </div>
-            <input className="border bg-input-background border-input rounded-md px-3 py-2 text-sm" placeholder="Rule ID" value={ruleId} onChange={e => setRuleId(e.target.value)} />
-            <input className="border bg-input-background border-input rounded-md px-3 py-2 text-sm min-w-[260px]" placeholder="Search" value={q} onChange={e => setQ(e.target.value)} />
+            <input className="border bg-input-background border-input rounded-md px-3 py-2 text-sm text-foreground" placeholder="Rule ID" value={ruleId} onChange={e => setRuleId(e.target.value)} />
+            <input className="border bg-input-background border-input rounded-md px-3 py-2 text-sm min-w-[260px] text-foreground" placeholder="Search" value={q} onChange={e => setQ(e.target.value)} />
             <Button onClick={applyFilters}>Apply</Button>
             <a className="underline text-primary" href={csvUrl} target="_blank" rel="noopener">Export CSV</a>
             <RouterLink className="underline" to={`/dashboard`}>Back</RouterLink>

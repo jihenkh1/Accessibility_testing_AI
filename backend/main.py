@@ -11,11 +11,13 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend.api.routes.scans import router as scans_router  # noqa: E402
+from backend.api.routes.manual_testing import router as manual_testing_router  # noqa: E402
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="AI Accessibility Analyzer API", version="0.1.0")
     app.include_router(scans_router, prefix="/api")
+    app.include_router(manual_testing_router)
     return app
 
 

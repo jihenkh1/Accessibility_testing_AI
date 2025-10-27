@@ -1,4 +1,4 @@
-import { Home, Upload, Scan, LayoutDashboard, History, Settings, GitBranch, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Home, Upload, Scan, LayoutDashboard, History, Settings, GitBranch, ChevronLeft, ChevronRight, ClipboardCheck } from 'lucide-react'
 import { Button } from './ui/button'
 import { Badge } from './ui/badge'
 import { useEffect } from 'react'
@@ -21,7 +21,8 @@ export function AppSidebar({ currentPage, onPageChange, collapsed, onCollapsedCh
     { id: 'home', label: 'Home', icon: Home },
     { id: 'upload', label: 'Upload', icon: Upload },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'pipeline', label: 'Pipeline', icon: GitBranch, badge: 'New' },
+    { id: 'manual-testing', label: 'Manual Testing', icon: ClipboardCheck},
+    { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
     { id: 'runs', label: 'Runs', icon: History },
     { id: 'settings', label: 'Settings', icon: Settings },
   ]
@@ -71,7 +72,6 @@ export function AppSidebar({ currentPage, onPageChange, collapsed, onCollapsedCh
               {!collapsed && (
                 <>
                   <span className="flex-1 text-left">{item.label}</span>
-                  {item.badge && <Badge variant="secondary" className="ml-auto text-xs">{item.badge}</Badge>}
                 </>
               )}
             </Button>

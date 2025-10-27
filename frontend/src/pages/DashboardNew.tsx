@@ -206,7 +206,7 @@ export default function DashboardNew() {
             AI Performance Overview
           </CardTitle>
           <CardDescription>
-            Quick stats about AI-powered analysis features. <Link to="/settings" className="text-primary hover:underline">View detailed stats →</Link>
+            Quick stats about AI-powered analysis features. <Link to="/settings?tab=ai" className="text-primary hover:underline font-medium">View detailed stats →</Link>
           </CardDescription>
         </CardHeader>
         <CardContent>

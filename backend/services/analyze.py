@@ -36,10 +36,13 @@ def analyze_report(
             ai = getattr(ei, "ai_analysis", None)
             if getattr(ei, "analysis_source", "") == "ai_enhanced":
                 ai_count += 1
+            # Get priority value (handle both enum and string)
+            priority = getattr(ei, "priority", "medium")
+            priority_str = priority.value if hasattr(priority, "value") else str(priority)
             issues.append(
                 {
                     "rule_id": str(rid),
-                    "priority": str(getattr(ei, "priority", "medium")),
+                    "priority": priority_str,
                     "user_impact": (getattr(ai, "user_impact", "") if ai else ""),
                     "fix_suggestion": (getattr(ai, "fix_suggestion", "") if ai else ""),
                     "effort_minutes": int(getattr(ei, "effort_minutes", 15) or 15),
