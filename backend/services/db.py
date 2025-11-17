@@ -17,7 +17,12 @@ CREATE TABLE IF NOT EXISTS run_summaries (
   medium_issues INTEGER NOT NULL,
   low_issues INTEGER NOT NULL,
   estimated_total_time_minutes INTEGER NOT NULL,
-  ai_enhanced_issues INTEGER NOT NULL
+  ai_enhanced_issues INTEGER NOT NULL,
+  raw_report_json TEXT,
+  pdf_report_path TEXT,
+  html_report_path TEXT,
+  screenshots_dir TEXT,
+  project_name TEXT DEFAULT 'Default Project'
 );
 
 CREATE TABLE IF NOT EXISTS run_issues (
@@ -40,7 +45,8 @@ CREATE TABLE IF NOT EXISTS manual_checklists (
   page_type TEXT NOT NULL,
   components TEXT NOT NULL,
   checklist_json TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  project_name TEXT DEFAULT 'Default Project'
 );
 
 CREATE TABLE IF NOT EXISTS test_sessions (
@@ -51,6 +57,7 @@ CREATE TABLE IF NOT EXISTS test_sessions (
   started_at TEXT NOT NULL,
   completed_at TEXT,
   status TEXT DEFAULT 'in-progress',
+  project_name TEXT DEFAULT 'Default Project',
   FOREIGN KEY(run_id) REFERENCES run_summaries(id) ON DELETE SET NULL,
   FOREIGN KEY(checklist_id) REFERENCES manual_checklists(id) ON DELETE CASCADE
 );
@@ -79,7 +86,18 @@ def _connect(db_path: Path) -> sqlite3.Connection:
     return con
 
 
-def insert_run_returning_id(db_path: Path, summary: Dict[str, Any], url: str, framework: str, ts_iso: str) -> int:
+def insert_run_returning_id(
+    db_path: Path,
+    summary: Dict[str, Any],
+    url: str,
+    framework: str,
+    ts_iso: str,
+    raw_report_json: Optional[str] = None,
+    pdf_report_path: Optional[str] = None,
+    html_report_path: Optional[str] = None,
+    screenshots_dir: Optional[str] = None,
+    project_name: str = "Default Project"
+) -> int:
     con = _connect(db_path)
     try:
         cur = con.execute(
@@ -87,8 +105,9 @@ def insert_run_returning_id(db_path: Path, summary: Dict[str, Any], url: str, fr
             INSERT INTO run_summaries (
                 ts, url, framework,
                 total_issues, critical_issues, high_issues, medium_issues, low_issues,
-                estimated_total_time_minutes, ai_enhanced_issues
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                estimated_total_time_minutes, ai_enhanced_issues,
+                raw_report_json, pdf_report_path, html_report_path, screenshots_dir, project_name
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 ts_iso,
@@ -101,6 +120,11 @@ def insert_run_returning_id(db_path: Path, summary: Dict[str, Any], url: str, fr
                 int(summary.get("low_issues", 0)),
                 int(summary.get("estimated_total_time_minutes", 0)),
                 int(summary.get("ai_enhanced_issues", 0)),
+                raw_report_json,
+                pdf_report_path,
+                html_report_path,
+                screenshots_dir,
+                project_name,
             ),
         )
         con.commit()
@@ -116,7 +140,7 @@ def get_run(db_path: Path, run_id: int) -> Optional[Dict[str, Any]]:
     con = _connect(db_path)
     try:
         row = con.execute(
-            "SELECT id, ts, url, framework, total_issues, critical_issues, high_issues, medium_issues, low_issues, estimated_total_time_minutes, ai_enhanced_issues FROM run_summaries WHERE id = ?",
+            "SELECT id, ts, url, framework, total_issues, critical_issues, high_issues, medium_issues, low_issues, estimated_total_time_minutes, ai_enhanced_issues, raw_report_json, pdf_report_path, html_report_path, screenshots_dir, project_name FROM run_summaries WHERE id = ?",
             (run_id,),
         ).fetchone()
         if not row:
@@ -133,19 +157,30 @@ def get_run(db_path: Path, run_id: int) -> Optional[Dict[str, Any]]:
             "low_issues",
             "estimated_total_time_minutes",
             "ai_enhanced_issues",
+            "raw_report_json",
+            "pdf_report_path",
+            "html_report_path",
+            "screenshots_dir",
+            "project_name",
         ]
         return dict(zip(cols, row))
     finally:
         con.close()
 
 
-def list_runs(db_path: Path, limit: int = 100) -> List[Dict[str, Any]]:
+def list_runs(db_path: Path, limit: int = 100, project_name: Optional[str] = None) -> List[Dict[str, Any]]:
     con = _connect(db_path)
     try:
-        rows = con.execute(
-            "SELECT id, ts, url, framework, total_issues, critical_issues, high_issues, medium_issues, low_issues, estimated_total_time_minutes, ai_enhanced_issues FROM run_summaries ORDER BY ts DESC LIMIT ?",
-            (limit,),
-        ).fetchall()
+        if project_name:
+            rows = con.execute(
+                "SELECT id, ts, url, framework, total_issues, critical_issues, high_issues, medium_issues, low_issues, estimated_total_time_minutes, ai_enhanced_issues, raw_report_json, pdf_report_path, html_report_path, screenshots_dir, project_name FROM run_summaries WHERE project_name = ? ORDER BY ts DESC LIMIT ?",
+                (project_name, limit),
+            ).fetchall()
+        else:
+            rows = con.execute(
+                "SELECT id, ts, url, framework, total_issues, critical_issues, high_issues, medium_issues, low_issues, estimated_total_time_minutes, ai_enhanced_issues, raw_report_json, pdf_report_path, html_report_path, screenshots_dir, project_name FROM run_summaries ORDER BY ts DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
         cols = [
             "id",
             "ts",
@@ -158,8 +193,25 @@ def list_runs(db_path: Path, limit: int = 100) -> List[Dict[str, Any]]:
             "low_issues",
             "estimated_total_time_minutes",
             "ai_enhanced_issues",
+            "raw_report_json",
+            "pdf_report_path",
+            "html_report_path",
+            "screenshots_dir",
+            "project_name",
         ]
         return [dict(zip(cols, r)) for r in rows]
+    finally:
+        con.close()
+
+
+def get_all_projects(db_path: Path) -> List[str]:
+    """Get list of all unique project names"""
+    con = _connect(db_path)
+    try:
+        rows = con.execute(
+            "SELECT DISTINCT project_name FROM run_summaries WHERE project_name IS NOT NULL ORDER BY project_name"
+        ).fetchall()
+        return [row[0] for row in rows if row[0]]
     finally:
         con.close()
 
@@ -202,6 +254,48 @@ def insert_run_issues(db_path: Path, run_id: int, issues: List[Dict[str, Any]]) 
             """,
             rows,
         )
+        con.commit()
+    finally:
+        con.close()
+
+
+def update_run_summary(db_path: Path, run_id: int, summary: Dict[str, Any]) -> None:
+    """Update an existing run with new analysis summary data"""
+    con = _connect(db_path)
+    try:
+        con.execute(
+            """
+            UPDATE run_summaries SET
+                total_issues = ?,
+                critical_issues = ?,
+                high_issues = ?,
+                medium_issues = ?,
+                low_issues = ?,
+                estimated_total_time_minutes = ?,
+                ai_enhanced_issues = ?
+            WHERE id = ?
+            """,
+            (
+                summary.get("total_issues", 0),
+                summary.get("critical", 0),
+                summary.get("serious", 0),
+                summary.get("moderate", 0),
+                summary.get("minor", 0),
+                summary.get("estimated_total_time_minutes", 0),
+                summary.get("ai_enhanced_issues", 0),
+                run_id,
+            ),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def delete_run_issues(db_path: Path, run_id: int) -> None:
+    """Delete all issues for a given run"""
+    con = _connect(db_path)
+    try:
+        con.execute("DELETE FROM run_issues WHERE run_id = ?", (run_id,))
         con.commit()
     finally:
         con.close()
@@ -288,13 +382,14 @@ def count_run_issues(
         con.close()
 
 
-def update_issue_status(db_path: Path, issue_id: int, status: str) -> bool:
+def update_issue_status(db_path: Path, issue_id: int, status: str, timestamp: Optional[str] = None) -> bool:
     """Update the status of a single issue.
     
     Args:
         db_path: Path to the database
         issue_id: ID of the issue to update
         status: New status (todo, in_progress, done, wont_fix)
+        timestamp: ISO timestamp when status changed (optional)
     
     Returns:
         True if update was successful, False otherwise
@@ -302,8 +397,8 @@ def update_issue_status(db_path: Path, issue_id: int, status: str) -> bool:
     con = _connect(db_path)
     try:
         cursor = con.execute(
-            "UPDATE run_issues SET status = ? WHERE id = ?",
-            (status, issue_id)
+            "UPDATE run_issues SET status = ?, status_updated_at = ? WHERE id = ?",
+            (status, timestamp, issue_id)
         )
         con.commit()
         return cursor.rowcount > 0
@@ -311,13 +406,14 @@ def update_issue_status(db_path: Path, issue_id: int, status: str) -> bool:
         con.close()
 
 
-def bulk_update_issue_status(db_path: Path, issue_ids: List[int], status: str) -> int:
+def bulk_update_issue_status(db_path: Path, issue_ids: List[int], status: str, timestamp: Optional[str] = None) -> int:
     """Update the status of multiple issues at once.
     
     Args:
         db_path: Path to the database
         issue_ids: List of issue IDs to update
         status: New status (todo, in_progress, done, wont_fix)
+        timestamp: ISO timestamp when status changed (optional)
     
     Returns:
         Number of issues updated
@@ -329,8 +425,8 @@ def bulk_update_issue_status(db_path: Path, issue_ids: List[int], status: str) -
     try:
         placeholders = ",".join(["?"] * len(issue_ids))
         cursor = con.execute(
-            f"UPDATE run_issues SET status = ? WHERE id IN ({placeholders})",
-            [status, *issue_ids]
+            f"UPDATE run_issues SET status = ?, status_updated_at = ? WHERE id IN ({placeholders})",
+            [status, timestamp, *issue_ids]
         )
         con.commit()
         return cursor.rowcount
@@ -585,5 +681,109 @@ def update_test_result(db_path: Path, result_id: int, status: Optional[str] = No
         )
         con.commit()
         return cursor.rowcount > 0
+    finally:
+        con.close()
+
+
+def delete_scan(db_path: Path, scan_id: int) -> bool:
+    """Delete a scan and all its associated issues (CASCADE)"""
+    con = sqlite3.connect(db_path)
+    try:
+        # Enable foreign keys to make CASCADE work
+        con.execute("PRAGMA foreign_keys = ON")
+        cursor = con.execute("DELETE FROM run_summaries WHERE id = ?", (scan_id,))
+        con.commit()
+        return cursor.rowcount > 0
+    finally:
+        con.close()
+
+
+def delete_manual_test_session(db_path: Path, session_id: int) -> bool:
+    """Delete a manual test session and all its results (CASCADE)"""
+    con = sqlite3.connect(db_path)
+    try:
+        # Enable foreign keys to make CASCADE work
+        con.execute("PRAGMA foreign_keys = ON")
+        cursor = con.execute("DELETE FROM test_sessions WHERE id = ?", (session_id,))
+        con.commit()
+        return cursor.rowcount > 0
+    finally:
+        con.close()
+
+
+def delete_checklist(db_path: Path, checklist_id: int) -> bool:
+    """Delete a manual checklist"""
+    con = sqlite3.connect(db_path)
+    try:
+        cursor = con.execute("DELETE FROM manual_checklists WHERE id = ?", (checklist_id,))
+        con.commit()
+        return cursor.rowcount > 0
+    finally:
+        con.close()
+
+
+def get_fix_metrics(db_path: Path) -> Dict[str, Any]:
+    """Get fix turnaround metrics for analytics.
+    
+    Returns:
+        Dictionary with:
+        - avg_fix_time_hours: Average hours to fix (from created_at to status_updated_at when status='done')
+        - fix_rate: Percentage of issues marked as done
+        - total_issues: Total number of issues
+        - fixed_issues: Number of issues marked as done
+        - avg_by_severity: Average fix time grouped by priority
+    """
+    con = _connect(db_path)
+    try:
+        # Calculate average fix time in hours for completed issues
+        cursor = con.execute("""
+            SELECT 
+                AVG((julianday(status_updated_at) - julianday(created_at)) * 24) as avg_hours
+            FROM run_issues
+            WHERE status = 'done' 
+                AND created_at IS NOT NULL 
+                AND status_updated_at IS NOT NULL
+        """)
+        result = cursor.fetchone()
+        avg_fix_time = round(result[0], 2) if result[0] else 0
+        
+        # Get total and fixed counts
+        cursor = con.execute("""
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as fixed
+            FROM run_issues
+        """)
+        total, fixed = cursor.fetchone()
+        fix_rate = round((fixed / total * 100), 1) if total > 0 else 0
+        
+        # Get average fix time by severity
+        cursor = con.execute("""
+            SELECT 
+                priority,
+                AVG((julianday(status_updated_at) - julianday(created_at)) * 24) as avg_hours,
+                COUNT(*) as count
+            FROM run_issues
+            WHERE status = 'done' 
+                AND created_at IS NOT NULL 
+                AND status_updated_at IS NOT NULL
+            GROUP BY priority
+        """)
+        by_severity = [
+            {
+                "priority": row[0],
+                "avg_fix_time_hours": round(row[1], 2) if row[1] else 0,
+                "count": row[2]
+            }
+            for row in cursor.fetchall()
+        ]
+        
+        return {
+            "avg_fix_time_hours": avg_fix_time,
+            "fix_rate": fix_rate,
+            "total_issues": total,
+            "fixed_issues": fixed,
+            "avg_by_severity": by_severity
+        }
     finally:
         con.close()

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, ValidationInfo
+from pydantic_core import PydanticCustomError
 
 
 class AnalyzeRequest(BaseModel):
@@ -10,6 +11,45 @@ class AnalyzeRequest(BaseModel):
     use_ai: bool = True
     max_ai_issues: Optional[int] = 50
     url: Optional[str] = "api_request"
+    project_name: Optional[str] = "Default Project"
+    
+    @field_validator("framework")
+    @classmethod
+    def validate_framework(cls, v: str) -> str:
+        """Validate framework is one of the supported types."""
+        allowed = {"html", "react", "vue", "angular", "svelte"}
+        if v.lower() not in allowed:
+            raise ValueError(
+                f"Invalid framework '{v}'. Must be one of: {', '.join(allowed)}"
+            )
+        return v.lower()
+    
+    @field_validator("max_ai_issues")
+    @classmethod
+    def validate_max_ai_issues(cls, v: Optional[int]) -> Optional[int]:
+        """Validate max_ai_issues is reasonable."""
+        if v is not None:
+            if v < 0:
+                raise ValueError("max_ai_issues must be non-negative")
+            if v > 1000:
+                raise ValueError("max_ai_issues cannot exceed 1000")
+        return v
+    
+    @field_validator("report")
+    @classmethod
+    def validate_report_not_empty(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate report is not empty."""
+        if not v:
+            raise ValueError("Report cannot be empty")
+        return v
+    
+    @field_validator("project_name")
+    @classmethod
+    def validate_project_name(cls, v: Optional[str]) -> Optional[str]:
+        """Validate project name length."""
+        if v and len(v) > 200:
+            raise ValueError("Project name cannot exceed 200 characters")
+        return v
 
 
 class IssueOut(BaseModel):
@@ -43,11 +83,17 @@ class ScanSummary(BaseModel):
     low_issues: int
     estimated_total_time_minutes: int
     ai_enhanced_issues: int
+    project_name: Optional[str] = "Default Project"
     # Additional computed fields for frontend
     name: Optional[str] = None
     most_violated_rule: Optional[str] = None
     most_violated_wcag: Optional[str] = None
     trend: Optional[float] = None
+    # Raw report artifacts
+    pdf_report_path: Optional[str] = None
+    html_report_path: Optional[str] = None
+    raw_report_json: Optional[str] = None
+    screenshots_dir: Optional[str] = None
 
 
 class IssuesPage(BaseModel):

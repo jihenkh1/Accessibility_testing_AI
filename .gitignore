@@ -53,9 +53,10 @@ data/*.sqlite
 data/*.db
 data/a11y_runs.sqlite
 
-# AI Cache
+# AI Cache & Usage Stats
 ai_cache.sqlite
 *.cache
+.ai_usage_stats.json
 
 # ==========================================
 # Build & Distribution
@@ -98,6 +99,8 @@ Thumbs.db
 # ==========================================
 test-report.json
 coverage/
+coverage.xml
+.coverage
 .coverage.*
 htmlcov/
 .tox/
@@ -153,3 +156,10 @@ docker-compose.override.yml
 .env.production
 .env.staging
 secrets/
+
+# ==========================================
+# Data Files
+# ==========================================
+data/*.sqlite
+data/*.sqlite-*
+data/uploaded_reports/

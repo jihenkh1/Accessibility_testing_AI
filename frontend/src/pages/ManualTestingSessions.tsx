@@ -4,7 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Plus, FileText, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, FileText, Clock, CheckCircle2, AlertCircle, Trash2 } from 'lucide-react';
+import { deleteManualTestSession } from '../lib/api';
 
 interface TestSession {
   id: number;
@@ -20,6 +21,7 @@ export default function ManualTestingSessions() {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<TestSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     loadSessions();
@@ -35,6 +37,23 @@ export default function ManualTestingSessions() {
       console.error('Error loading sessions:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDelete = async (sessionId: number) => {
+    if (!confirm('Are you sure you want to delete this test session? This action cannot be undone.')) {
+      return;
+    }
+
+    setDeletingId(sessionId);
+    try {
+      await deleteManualTestSession(sessionId);
+      await loadSessions(); // Reload the list
+    } catch (error) {
+      console.error('Error deleting session:', error);
+      alert('Failed to delete session');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -172,6 +191,15 @@ export default function ManualTestingSessions() {
                         >
                           <FileText className="w-4 h-4 mr-1" />
                           View Results
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleDelete(session.id)}
+                          disabled={deletingId === session.id}
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </TableCell>

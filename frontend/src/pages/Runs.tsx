@@ -85,19 +85,27 @@ const ScanCard = ({ scan }: { scan: Scan }) => {
             </div>
 
             {/* Issue counts */}
-            <div className="flex items-center gap-3 text-sm">
-              {scan.critical_issues > 0 && (
-                <span className="text-red-500 font-medium">{scan.critical_issues} Critical</span>
-              )}
-              {scan.high_issues > 0 && (
-                <span className="text-orange-500 font-medium">{scan.high_issues} High</span>
-              )}
-              {scan.medium_issues > 0 && (
-                <span className="text-yellow-500 font-medium">{scan.medium_issues} Medium</span>
-              )}
-              {scan.low_issues > 0 && (
-                <span className="text-blue-500 font-medium">{scan.low_issues} Low</span>
-              )}
+            <div className="flex items-center gap-3 text-sm flex-wrap">
+              {(scan.critical_issues > 0 || scan.high_issues > 0 || scan.medium_issues > 0) ? (
+                <>
+                  {scan.critical_issues > 0 && (
+                    <span className="text-red-700 dark:text-red-400 font-medium">{scan.critical_issues} Critical</span>
+                  )}
+                  {scan.high_issues > 0 && (
+                    <span className="text-orange-700 dark:text-orange-400 font-medium">{scan.high_issues} High</span>
+                  )}
+                  {scan.medium_issues > 0 && (
+                    <span className="text-yellow-700 dark:text-yellow-300 font-medium">{scan.medium_issues} Medium</span>
+                  )}
+                  {scan.low_issues > 0 && (
+                    <span className="text-blue-700 dark:text-blue-400 font-medium">{scan.low_issues} Low</span>
+                  )}
+                </>
+              ) : scan.total_issues > 0 ? (
+                <Badge variant="outline" className="text-muted-foreground">
+                  Severity breakdown unavailable
+                </Badge>
+              ) : null}
               <span className="text-muted-foreground">• {scan.total_issues} total</span>
             </div>
 
@@ -118,13 +126,13 @@ const ScanCard = ({ scan }: { scan: Scan }) => {
                   />
                 </div>
                 <div className="flex items-center gap-3 text-xs pt-1">
-                  <span className="flex items-center gap-1 text-gray-500">
+                  <span className="flex items-center gap-1 text-gray-700 dark:text-gray-300">
                     <Circle className="w-3 h-3" /> {statusSummary.status_counts.todo} To Do
                   </span>
-                  <span className="flex items-center gap-1 text-blue-500">
+                  <span className="flex items-center gap-1 text-blue-700 dark:text-blue-400">
                     <Clock className="w-3 h-3" /> {statusSummary.status_counts.in_progress} In Progress
                   </span>
-                  <span className="flex items-center gap-1 text-green-500">
+                  <span className="flex items-center gap-1 text-green-700 dark:text-green-400">
                     <CheckCircle className="w-3 h-3" /> {statusSummary.status_counts.done} Done
                   </span>
                 </div>
@@ -165,6 +173,9 @@ export default function Runs() {
     },
   })
 
+  // Filter to only show analyzed scans (exclude pending uploads)
+  const analyzedScans = scans?.filter(scan => scan.total_issues > 0) || []
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -187,8 +198,8 @@ export default function Runs() {
     )
   }
 
-  const totalScans = scans?.length || 0
-  const totalIssues = scans?.reduce((sum, s) => sum + s.total_issues, 0) || 0
+  const totalScans = analyzedScans?.length || 0
+  const totalIssues = analyzedScans?.reduce((sum, s) => sum + s.total_issues, 0) || 0
 
   return (
     <div className="space-y-6">
@@ -213,16 +224,16 @@ export default function Runs() {
       </div>
 
       {/* Scans list */}
-      {scans && scans.length > 0 ? (
+      {analyzedScans && analyzedScans.length > 0 ? (
         <div className="space-y-3">
-          {scans.map((scan) => (
+          {analyzedScans.map((scan) => (
             <ScanCard key={scan.id} scan={scan} />
           ))}
         </div>
       ) : (
         <Card>
           <CardContent className="p-12 text-center">
-            <div className="text-muted-foreground mb-4">No scans yet. Upload a report to get started.</div>
+            <div className="text-muted-foreground mb-4">No analyzed scans yet. Upload and analyze a report to get started.</div>
             <Button onClick={() => navigate('/upload')}>
               Upload Report
             </Button>

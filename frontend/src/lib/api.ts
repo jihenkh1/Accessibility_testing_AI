@@ -14,6 +14,7 @@ export type AnalyzeRequest = {
   use_ai?: boolean
   max_ai_issues?: number | null
   url?: string
+  project_name?: string
 }
 
 export async function postScan(req: AnalyzeRequest) {
@@ -25,13 +26,32 @@ export async function postScan(req: AnalyzeRequest) {
   }
 }
 
-export async function listScans() {
+export async function analyzeExistingScan(scanId: number, req: AnalyzeRequest) {
+  const res = await api.put(`/scans/${scanId}/analyze`, req)
+  return res.data as {
+    scan_id?: number
+    summary: Record<string, any>
+    issues: Array<Record<string, any>>
+  }
+}
+
+export async function listScans(project?: string) {
   try {
-    const res = await api.get('/scans')
+    const params = project ? { project } : {}
+    const res = await api.get('/scans', { params })
     return res.data as Array<Record<string, any>>
   } catch (err) {
     // Gracefully degrade when backend is unavailable so the Dashboard can render
     return []
+  }
+}
+
+export async function listProjects() {
+  try {
+    const res = await api.get('/projects')
+    return res.data as string[]
+  } catch (err) {
+    return ['Default Project']
   }
 }
 
@@ -101,5 +121,39 @@ export async function getAICacheStats() {
 export async function cleanupAICache() {
   const res = await api.post('/ai/cache/cleanup')
   return res.data as { success: boolean; deleted?: number; message?: string; error?: string }
+}
+
+// Delete operations
+export async function deleteScan(scanId: number) {
+  const res = await api.delete(`/scans/${scanId}`)
+  return res.data as { message: string; scan_id: number }
+}
+
+export async function deleteManualTestSession(sessionId: number) {
+  const res = await api.delete(`/manual-tests/${sessionId}`)
+  return res.data as { message: string; session_id: number }
+}
+
+export async function deleteChecklist(checklistId: number) {
+  const res = await api.delete(`/checklists/${checklistId}`)
+  return res.data as { message: string; checklist_id: number }
+}
+
+// Analytics
+export type FixMetrics = {
+  avg_fix_time_hours: number
+  fix_rate: number
+  total_issues: number
+  fixed_issues: number
+  avg_by_severity: Array<{
+    priority: string
+    avg_fix_time_hours: number
+    count: number
+  }>
+}
+
+export async function getFixMetrics() {
+  const res = await api.get('/analytics/fix-metrics')
+  return res.data as FixMetrics
 }
 

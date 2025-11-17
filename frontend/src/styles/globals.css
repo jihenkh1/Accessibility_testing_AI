@@ -7,16 +7,16 @@
   --card-foreground: #2d2a35;
   --popover: #ffffff;
   --popover-foreground: #2d2a35;
-  --primary: #8a6fc2;
+  --primary: #7c3aed;
   --primary-foreground: #ffffff;
   --secondary: #f7f4f9;
   --secondary-foreground: #4a3d5f;
   --muted: #f5f1f0;
   --muted-foreground: #5f5a66;
-  --accent: #f7b7a3;
-  --accent-foreground: #5a3328;
+  --accent: #f97316;
+  --accent-foreground: #ffffff;
   --accent-secondary: #c4e3cb;
-  --destructive: #e67a8f;
+  --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --border: #e8dfe5;
   --input: transparent;
@@ -24,21 +24,21 @@
   --switch-background: #ddd0e0;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #b8a5d4;
-  --chart-1: #8a6fc2;
-  --chart-2: #f7b7a3;
-  --chart-3: #c4e3cb;
-  --chart-4: #b8d4e8;
-  --chart-5: #f5c4d8;
+  --ring: #a78bfa;
+  --chart-1: #7c3aed;
+  --chart-2: #f97316;
+  --chart-3: #10b981;
+  --chart-4: #0ea5e9;
+  --chart-5: #f59e0b;
   --radius: 0.75rem;
   --sidebar: #faf7f9;
   --sidebar-foreground: #2d2a35;
-  --sidebar-primary: #8a6fc2;
+  --sidebar-primary: #7c3aed;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #f0e9f5;
   --sidebar-accent-foreground: #4a3d5f;
   --sidebar-border: #e8dfe5;
-  --sidebar-ring: #b8a5d4;
+  --sidebar-ring: #a78bfa;
 }
 
 /* Ocean Blue Theme */
@@ -224,34 +224,34 @@
 }
 
 .dark {
-  --background: #1e1e2a;
-  --foreground: #f0f0f0;
-  --card: #252532;
-  --card-foreground: #f0f0f0;
-  --popover: #252532;
-  --popover-foreground: #f0f0f0;
-  --primary: #9b84d4;
+  --background: #0f1117;
+  --foreground: #f5f5f7;
+  --card: #1a1b23;
+  --card-foreground: #f5f5f7;
+  --popover: #1a1b23;
+  --popover-foreground: #f5f5f7;
+  --primary: #7c3aed;
   --primary-foreground: #ffffff;
-  --secondary: #2d2d3d;
-  --secondary-foreground: #c7bfe0;
-  --muted: #2a2a38;
-  --muted-foreground: #b4b8c5;
-  --accent: #f7b7a3;
-  --accent-foreground: #1e1e2a;
-  --destructive: #e67a8f;
+  --secondary: #27283a;
+  --secondary-foreground: #d4d4f0;
+  --muted: #27283a;
+  --muted-foreground: #d1d5db;
+  --accent: #fbbf24;
+  --accent-foreground: #111827;
+  --destructive: #f87171;
   --destructive-foreground: #ffffff;
-  --border: #3a3a4a;
-  --input: #3a3a4a;
-  --input-background: #2a2a38;
-  --ring: #9b84d4;
-  --sidebar: #0f172a;
-  --sidebar-foreground: #e2e8f0;
-  --sidebar-primary: #9b84d4;
+  --border: #374151;
+  --input: #374151;
+  --input-background: #1f2937;
+  --ring: #a78bfa;
+  --sidebar: #0f1117;
+  --sidebar-foreground: #f5f5f7;
+  --sidebar-primary: #7c3aed;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #111827;
-  --sidebar-accent-foreground: #e5e7eb;
-  --sidebar-border: #1f2937;
-  --sidebar-ring: #9b84d4;
+  --sidebar-accent: #1f2937;
+  --sidebar-accent-foreground: #f5f5f7;
+  --sidebar-border: #374151;
+  --sidebar-ring: #a78bfa;
 }
 
 @layer base {
@@ -262,9 +262,27 @@
     @apply bg-background text-foreground;
   }
   
-  /* Ensure small text has better contrast for WCAG AAA compliance */
+  /* Improve contrast for better readability */
   .text-xs.text-muted-foreground,
   .text-sm.text-muted-foreground {
     @apply font-medium;
+  }
+  
+  /* Dark mode text improvements */
+  .dark .text-muted-foreground {
+    color: hsl(0 0% 82%);
+  }
+  
+  .dark .text-card-foreground {
+    color: hsl(0 0% 96%);
+  }
+  
+  /* Improve link visibility in dark mode */
+  .dark a {
+    color: hsl(263 70% 70%);
+  }
+  
+  .dark a:hover {
+    color: hsl(263 70% 80%);
   }
 }

@@ -1,4 +1,4 @@
-import { Home, Upload, Scan, LayoutDashboard, History, Settings, GitBranch, ChevronLeft, ChevronRight, ClipboardCheck } from 'lucide-react'
+import { Upload, LayoutDashboard, History, Settings, GitBranch, ChevronLeft, ChevronRight, ClipboardCheck, FileText } from 'lucide-react'
 import { Button } from './ui/button'
 import { Badge } from './ui/badge'
 import { useEffect } from 'react'
@@ -18,19 +18,22 @@ export function AppSidebar({ currentPage, onPageChange, collapsed, onCollapsedCh
     return () => window.removeEventListener('toggle-sidebar', handleToggle)
   }, [collapsed, onCollapsedChange])
   const menu = [
-    { id: 'home', label: 'Home', icon: Home },
-    { id: 'upload', label: 'Upload', icon: Upload },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'upload', label: 'Upload', icon: Upload },
+    { id: 'reports', label: 'Reports', icon: FileText },
     { id: 'manual-testing', label: 'Manual Testing', icon: ClipboardCheck},
     { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
     { id: 'runs', label: 'Runs', icon: History },
     { id: 'settings', label: 'Settings', icon: Settings },
   ]
 
-  return (
+    return (
     <div className={`${collapsed ? 'w-16' : 'w-64'} border-r border-sidebar-border bg-sidebar min-h-screen flex flex-col transition-all duration-300 relative`}>
       <div className="h-16 px-6 border-b border-sidebar-border flex items-center">
-        <div className="flex items-center gap-2">
+        <button 
+          onClick={() => onPageChange('dashboard')}
+          className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+        >
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
             <span className="text-primary-foreground text-sm font-semibold">A</span>
           </div>
@@ -39,7 +42,7 @@ export function AppSidebar({ currentPage, onPageChange, collapsed, onCollapsedCh
               <h3 className="text-sidebar-foreground font-semibold">AccessTest</h3>
             </div>
           )}
-        </div>
+        </button>
       </div>
       
       {/* Collapse Toggle Button */}
@@ -64,7 +67,7 @@ export function AppSidebar({ currentPage, onPageChange, collapsed, onCollapsedCh
             <Button
               key={item.id}
               variant={active ? 'secondary' : 'ghost'}
-              className={`w-full ${collapsed ? 'justify-center px-2' : 'justify-start'} ${active ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground hover:bg-sidebar-accent/50'}`}
+              className={`w-full ${collapsed ? 'justify-center px-2' : 'justify-start'} ${active ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground hover:bg-muted hover:text-foreground'}`}
               onClick={() => onPageChange(item.id)}
               title={collapsed ? item.label : undefined}
             >

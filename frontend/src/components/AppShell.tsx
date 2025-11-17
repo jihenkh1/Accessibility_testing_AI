@@ -8,9 +8,9 @@ import { applyTheme, getStoredTheme } from '../utils/themes'
 type Props = { children: ReactNode }
 
 const routeMap: Record<string, string> = {
-  home: '/home',
   upload: '/upload',
-  dashboard: '/dashboard',
+  dashboard: '/',
+  reports: '/reports',
   runs: '/runs',
   settings: '/settings',
   pipeline: '/pipeline',
@@ -18,15 +18,16 @@ const routeMap: Record<string, string> = {
 }
 
 function pageFromPath(pathname: string): string {
+  if (pathname === '/') return 'dashboard'
   if (pathname.startsWith('/upload')) return 'upload'
   if (pathname.startsWith('/scan/')) return 'runs'
   if (pathname.startsWith('/dashboard')) return 'dashboard'
+  if (pathname.startsWith('/reports')) return 'reports'
   if (pathname.startsWith('/runs')) return 'runs'
   if (pathname.startsWith('/pipeline')) return 'pipeline'
   if (pathname.startsWith('/settings')) return 'settings'
   if (pathname.startsWith('/manual-testing')) return 'manual-testing'
-  if (pathname.startsWith('/home')) return 'home'
-  return 'home'
+  return 'dashboard'
 }
 
 export function AppShell({ children }: Props) {
@@ -42,7 +43,6 @@ export function AppShell({ children }: Props) {
     applyTheme(themeName, dark)
   }, [themeName, dark])
 
-  // Sync theme with changes from other pages (e.g., Settings) and other tabs
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key === 'accesstest-theme' && e.newValue) {
@@ -58,7 +58,7 @@ export function AppShell({ children }: Props) {
 
   return (
     <KeyboardShortcutsProvider
-      onNavigate={(page) => navigate(routeMap[page] || '/home')}
+      onNavigate={(page) => navigate(routeMap[page] || '/')}
       onThemeToggle={() => setDark(d => !d)}
       onToggleSidebar={() => {
         window.dispatchEvent(new CustomEvent('toggle-sidebar'))
@@ -68,7 +68,7 @@ export function AppShell({ children }: Props) {
       <div className="min-h-screen bg-background text-foreground flex">
         <AppSidebar
           currentPage={current}
-          onPageChange={(page) => navigate(routeMap[page] || '/home')}
+          onPageChange={(page) => navigate(routeMap[page] || '/')}
           collapsed={sidebarCollapsed}
           onCollapsedChange={setSidebarCollapsed}
         />

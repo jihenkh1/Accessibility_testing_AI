@@ -74,7 +74,7 @@ class AIResponse(BaseModel):
 
 @dataclass
 class UsageStats:
-    """Track token usage and cost metrics"""
+    """Track token usage and cost metrics with persistent storage"""
     total_requests: int = 0
     successful_requests: int = 0
     failed_requests: int = 0
@@ -82,6 +82,7 @@ class UsageStats:
     total_completion_tokens: int = 0
     total_tokens: int = 0
     estimated_cost_usd: float = 0.0
+    _stats_file: str = field(default=".ai_usage_stats.json", init=False, repr=False)
     
     def add_usage(self, prompt_tokens: int, completion_tokens: int, cost: float = 0.0):
         """Add usage from a single API call"""
@@ -91,11 +92,57 @@ class UsageStats:
         self.total_completion_tokens += completion_tokens
         self.total_tokens += (prompt_tokens + completion_tokens)
         self.estimated_cost_usd += cost
+        self._save()
     
     def add_failure(self):
         """Record a failed request"""
         self.total_requests += 1
         self.failed_requests += 1
+        self._save()
+    
+    def _save(self):
+        """Save stats to file"""
+        try:
+            with open(self._stats_file, 'w') as f:
+                json.dump(self.to_dict(), f)
+        except Exception as e:
+            logger.warning(f"Failed to save usage stats: {e}")
+    
+    @classmethod
+    def load(cls, stats_file: str = ".ai_usage_stats.json") -> 'UsageStats':
+        """Load stats from file or create new if not exists"""
+        try:
+            if os.path.exists(stats_file):
+                with open(stats_file, 'r') as f:
+                    data = json.load(f)
+                    stats = cls(
+                        total_requests=data.get('total_requests', 0),
+                        successful_requests=data.get('successful_requests', 0),
+                        failed_requests=data.get('failed_requests', 0),
+                        total_prompt_tokens=data.get('total_prompt_tokens', 0),
+                        total_completion_tokens=data.get('total_completion_tokens', 0),
+                        total_tokens=data.get('total_tokens', 0),
+                        estimated_cost_usd=data.get('estimated_cost_usd', 0.0)
+                    )
+                    stats._stats_file = stats_file
+                    return stats
+        except Exception as e:
+            logger.warning(f"Failed to load usage stats: {e}")
+        
+        stats = cls()
+        stats._stats_file = stats_file
+        return stats
+    
+    def reset(self):
+        """Reset all stats to zero"""
+        self.total_requests = 0
+        self.successful_requests = 0
+        self.failed_requests = 0
+        self.total_prompt_tokens = 0
+        self.total_completion_tokens = 0
+        self.total_tokens = 0
+        self.estimated_cost_usd = 0.0
+        self._save()
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for logging/API responses"""
@@ -130,8 +177,8 @@ class SimpleAIClient:
         self._last_call_time = 0.0
         self._min_interval = 0.2  # 200ms between calls = max 5 requests/second
         
-        # Usage tracking
-        self.usage_stats = UsageStats()
+        # Usage tracking - load from persistent storage
+        self.usage_stats = UsageStats.load()
         
         # Pricing per 1M tokens (update these based on your model)
         # For free models, these will be 0
@@ -174,7 +221,7 @@ class SimpleAIClient:
     
     def reset_usage_stats(self):
         """Reset usage statistics (useful for testing or new sessions)"""
-        self.usage_stats = UsageStats()
+        self.usage_stats.reset()
         logger.info("Usage statistics reset")
 
     def analyze_accessibility_issue(self, issue_description: str, elements: Optional[list] = None, impact: Optional[str] = None, rule_id: Optional[str] = None, framework: Optional[str] = None) -> Optional[Dict[str, Any]]:

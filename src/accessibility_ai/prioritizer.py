@@ -36,6 +36,16 @@ class IssuePrioritizer:
             "multiple ways", "consistent navigation"
         ]
 
+    def prioritize(self, issue: AccessibilityIssue, context: Optional[Dict[str, Any]] = None) -> Priority:
+        """Main method to assign priority to an issue"""
+        score = self.calculate_priority_score(issue, context)
+        return self.score_to_priority(score)
+    
+    # Alias for compatibility
+    def assign_priority(self, issue: AccessibilityIssue, context: Optional[Dict[str, Any]] = None) -> Priority:
+        """Alias for prioritize() - for backward compatibility"""
+        return self.prioritize(issue, context)
+
     def calculate_priority_score(self, issue: AccessibilityIssue, context: Optional[Dict[str, Any]] = None) -> int:
         """Calculate priority score (0-100) for an issue"""
         if context is None:

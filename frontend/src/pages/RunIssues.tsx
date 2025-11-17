@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useParams, useSearchParams, Link as RouterLink } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { Button } from '../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
@@ -26,10 +26,10 @@ type PageResult = { items: Issue[]; total: number }
 // Severity badge component with color coding
 const SeverityBadge = ({ priority }: { priority: string }) => {
   const severityConfig = {
-    critical: { color: 'bg-red-500 hover:bg-red-600 text-white', icon: AlertCircle, label: 'Critical' },
-    high: { color: 'bg-orange-500 hover:bg-orange-600 text-white', icon: AlertTriangle, label: 'High' },
-    medium: { color: 'bg-yellow-500 hover:bg-yellow-600 text-white', icon: AlertTriangle, label: 'Medium' },
-    low: { color: 'bg-blue-500 hover:bg-blue-600 text-white', icon: Info, label: 'Low' },
+    critical: { color: 'bg-red-600 hover:bg-red-700 text-white dark:bg-red-500 dark:hover:bg-red-600', icon: AlertCircle, label: 'Critical' },
+    high: { color: 'bg-orange-600 hover:bg-orange-700 text-white dark:bg-orange-500 dark:hover:bg-orange-600', icon: AlertTriangle, label: 'High' },
+    medium: { color: 'bg-yellow-600 hover:bg-yellow-700 text-white dark:bg-yellow-500 dark:hover:bg-yellow-600', icon: AlertTriangle, label: 'Medium' },
+    low: { color: 'bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-500 dark:hover:bg-blue-600', icon: Info, label: 'Low' },
   }
   const config = severityConfig[priority.toLowerCase() as keyof typeof severityConfig] || severityConfig.low
   const Icon = config.icon
@@ -251,6 +251,7 @@ export default function RunIssues() {
   const { id } = useParams()
   const runId = Number(id)
   const [searchParams, setSearchParams] = useSearchParams()
+  const queryClient = useQueryClient()
 
   const [severities, setSeverities] = useState<string[]>(searchParams.getAll('severity') || [])
   const [ruleId, setRuleId] = useState<string>(searchParams.get('rule_id') || '')
@@ -330,8 +331,9 @@ export default function RunIssues() {
   const handleStatusChange = async (issueId: number, newStatus: string) => {
     try {
       await api.patch(`/issues/${issueId}/status?status=${newStatus}`)
-      // Refetch data to update UI
-      window.location.reload()
+      // Invalidate queries to update UI
+      queryClient.invalidateQueries({ queryKey: ['issues', runId] })
+      queryClient.invalidateQueries({ queryKey: ['fixMetrics'] })
     } catch (error) {
       console.error('Failed to update status:', error)
     }
@@ -353,8 +355,10 @@ export default function RunIssues() {
                 </label>
               ))}
             </div>
-            <input className="border bg-input-background border-input rounded-md px-3 py-2 text-sm text-foreground" placeholder="Rule ID" value={ruleId} onChange={e => setRuleId(e.target.value)} />
-            <input className="border bg-input-background border-input rounded-md px-3 py-2 text-sm min-w-[260px] text-foreground" placeholder="Search" value={q} onChange={e => setQ(e.target.value)} />
+            <label htmlFor="rule-id-filter" className="sr-only">Filter by Rule ID</label>
+            <input id="rule-id-filter" className="border bg-input-background border-input rounded-md px-3 py-2 text-sm text-foreground" placeholder="Rule ID" value={ruleId} onChange={e => setRuleId(e.target.value)} />
+            <label htmlFor="search-filter" className="sr-only">Search issues</label>
+            <input id="search-filter" className="border bg-input-background border-input rounded-md px-3 py-2 text-sm min-w-[260px] text-foreground" placeholder="Search" value={q} onChange={e => setQ(e.target.value)} />
             <Button onClick={applyFilters}>Apply</Button>
             <a className="underline text-primary" href={csvUrl} target="_blank" rel="noopener">Export CSV</a>
             <RouterLink className="underline" to={`/dashboard`}>Back</RouterLink>
