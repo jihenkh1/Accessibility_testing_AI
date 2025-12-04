@@ -1,10 +1,13 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Badge } from '../components/ui/badge'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, Calendar, Globe, Code, CheckCircle, Clock, Circle } from 'lucide-react'
+import { ArrowRight, Calendar, Globe, Code, CheckCircle, Clock, Circle, Trash2 } from 'lucide-react'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../components/ui/alert-dialog'
+import { toast } from 'sonner'
+import { useState } from 'react'
 
 type Scan = {
   id: number
@@ -25,8 +28,9 @@ type StatusSummary = {
   wont_fix: number
 }
 
-const ScanCard = ({ scan }: { scan: Scan }) => {
+const ScanCard = ({ scan, onDelete }: { scan: Scan; onDelete: (id: number) => void }) => {
   const navigate = useNavigate()
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   
   // Fetch status summary for this scan
   const { data: statusSummary } = useQuery({
@@ -140,7 +144,7 @@ const ScanCard = ({ scan }: { scan: Scan }) => {
             )}
           </div>
 
-          {/* Right side - Action button */}
+          {/* Right side - Action buttons */}
           <div className="flex flex-col gap-2">
             <Button
               onClick={() => navigate(`/scan/${scan.id}/issues`)}
@@ -156,6 +160,38 @@ const ScanCard = ({ scan }: { scan: Scan }) => {
             >
               Summary
             </Button>
+            
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="min-w-[140px] text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Scan?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete scan #{scan.id} and all {scan.total_issues} associated issues. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      onDelete(scan.id)
+                      setDeleteDialogOpen(false)
+                    }}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Delete Scan
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
       </CardContent>
@@ -165,12 +201,31 @@ const ScanCard = ({ scan }: { scan: Scan }) => {
 
 export default function Runs() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  
   const { data: scans, isLoading, error } = useQuery({
     queryKey: ['scans'],
     queryFn: async () => {
       const res = await api.get('/scans')
       return res.data as Scan[]
     },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (scanId: number) => {
+      await api.delete(`/scans/${scanId}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scans'] })
+      queryClient.invalidateQueries({ queryKey: ['automated-context'] })
+      queryClient.refetchQueries({ queryKey: ['scans'] })
+      toast.success('Scan deleted successfully')
+    },
+    onError: (error: any) => {
+      toast.error('Failed to delete scan', {
+        description: error?.response?.data?.detail || error.message
+      })
+    }
   })
 
   // Filter to only show analyzed scans (exclude pending uploads)
@@ -227,7 +282,11 @@ export default function Runs() {
       {analyzedScans && analyzedScans.length > 0 ? (
         <div className="space-y-3">
           {analyzedScans.map((scan) => (
-            <ScanCard key={scan.id} scan={scan} />
+            <ScanCard 
+              key={scan.id} 
+              scan={scan}
+              onDelete={(id) => deleteMutation.mutate(id)}
+            />
           ))}
         </div>
       ) : (

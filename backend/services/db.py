@@ -6,6 +6,13 @@ from typing import Any, Dict, List, Optional
 
 
 SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS projects (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  description TEXT
+);
+
 CREATE TABLE IF NOT EXISTS run_summaries (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   ts TEXT NOT NULL,
@@ -73,6 +80,36 @@ CREATE TABLE IF NOT EXISTS manual_test_results (
   created_at TEXT NOT NULL,
   FOREIGN KEY(session_id) REFERENCES test_sessions(id) ON DELETE CASCADE,
   FOREIGN KEY(checklist_id) REFERENCES manual_checklists(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS manual_bugs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  wcag_criterion TEXT NOT NULL,
+  severity TEXT NOT NULL,
+  testing_tool TEXT NOT NULL,
+  description TEXT NOT NULL,
+  expected_behavior TEXT NOT NULL,
+  actual_behavior TEXT NOT NULL,
+  steps_to_reproduce TEXT,
+  affected_user_groups TEXT,
+  notes TEXT,
+  project_name TEXT DEFAULT 'Default Project',
+  run_id INTEGER,
+  created_at TEXT NOT NULL,
+  created_by TEXT,
+  status TEXT DEFAULT 'open',
+  FOREIGN KEY(run_id) REFERENCES run_summaries(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS bug_evidence (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  bug_id INTEGER NOT NULL,
+  file_path TEXT NOT NULL,
+  file_type TEXT NOT NULL,
+  file_size INTEGER NOT NULL,
+  uploaded_at TEXT NOT NULL,
+  FOREIGN KEY(bug_id) REFERENCES manual_bugs(id) ON DELETE CASCADE
 );
 """
 
@@ -208,10 +245,129 @@ def get_all_projects(db_path: Path) -> List[str]:
     """Get list of all unique project names"""
     con = _connect(db_path)
     try:
+        # First get from projects table
         rows = con.execute(
-            "SELECT DISTINCT project_name FROM run_summaries WHERE project_name IS NOT NULL ORDER BY project_name"
+            "SELECT name FROM projects ORDER BY name"
         ).fetchall()
-        return [row[0] for row in rows if row[0]]
+        project_names = [row[0] for row in rows]
+        
+        # Also include any projects from run_summaries that aren't in projects table
+        run_projects = con.execute(
+            "SELECT DISTINCT project_name FROM run_summaries WHERE project_name IS NOT NULL"
+        ).fetchall()
+        for row in run_projects:
+            if row[0] and row[0] not in project_names:
+                project_names.append(row[0])
+        
+        return sorted(project_names) if project_names else []
+    finally:
+        con.close()
+
+
+def create_project(db_path: Path, name: str, description: str = "") -> Dict[str, Any]:
+    """Create a new project"""
+    from datetime import datetime, timezone
+    
+    con = _connect(db_path)
+    try:
+        ts_iso = datetime.now(timezone.utc).isoformat()
+        con.execute(
+            "INSERT INTO projects (name, created_at, description) VALUES (?, ?, ?)",
+            (name, ts_iso, description)
+        )
+        con.commit()
+        return {
+            "name": name,
+            "created_at": ts_iso,
+            "description": description
+        }
+    except sqlite3.IntegrityError:
+        raise ValueError(f"Project '{name}' already exists")
+    finally:
+        con.close()
+
+
+def cleanup_project_creation_scans(db_path: Path) -> int:
+    """Remove old project_creation placeholder scans"""
+    con = _connect(db_path)
+    try:
+        # Delete issues first (foreign key constraint)
+        con.execute(
+            """DELETE FROM run_issues 
+               WHERE run_id IN (
+                   SELECT id FROM run_summaries WHERE url = 'project_creation'
+               )"""
+        )
+        # Delete the scans
+        cursor = con.execute(
+            "DELETE FROM run_summaries WHERE url = 'project_creation'"
+        )
+        deleted_count = cursor.rowcount
+        con.commit()
+        return deleted_count
+    finally:
+        con.close()
+
+
+def delete_project(db_path: Path, project_name: str) -> Dict[str, Any]:
+    """Delete a project and optionally all its scans"""
+    con = _connect(db_path)
+    try:
+        # Check if project exists
+        project_exists = con.execute(
+            "SELECT COUNT(*) FROM projects WHERE name = ?", (project_name,)
+        ).fetchone()[0]
+        
+        # Count scans in this project
+        scan_count = con.execute(
+            "SELECT COUNT(*) FROM run_summaries WHERE project_name = ?", (project_name,)
+        ).fetchone()[0]
+        
+        # Count bugs in this project
+        bug_count = con.execute(
+            "SELECT COUNT(*) FROM manual_bugs WHERE project_name = ?", (project_name,)
+        ).fetchone()[0]
+        
+        # Delete all bugs and their evidence for this project
+        if bug_count > 0:
+            # Delete bug evidence first (foreign key)
+            con.execute(
+                """DELETE FROM bug_evidence 
+                   WHERE bug_id IN (
+                       SELECT id FROM manual_bugs WHERE project_name = ?
+                   )""",
+                (project_name,)
+            )
+            # Delete bugs
+            con.execute(
+                "DELETE FROM manual_bugs WHERE project_name = ?", (project_name,)
+            )
+        
+        # Delete all scans and issues for this project
+        if scan_count > 0:
+            # Delete issues first (foreign key)
+            con.execute(
+                """DELETE FROM run_issues 
+                   WHERE run_id IN (
+                       SELECT id FROM run_summaries WHERE project_name = ?
+                   )""",
+                (project_name,)
+            )
+            # Delete scans
+            con.execute(
+                "DELETE FROM run_summaries WHERE project_name = ?", (project_name,)
+            )
+        
+        # Delete from projects table
+        if project_exists:
+            con.execute("DELETE FROM projects WHERE name = ?", (project_name,))
+        
+        con.commit()
+        return {
+            "deleted_scans": scan_count,
+            "deleted_bugs": bug_count,
+            "project_removed": bool(project_exists)
+        }
     finally:
         con.close()
 
@@ -516,16 +672,16 @@ def get_checklist(db_path: Path, checklist_id: int) -> Optional[Dict[str, Any]]:
         con.close()
 
 
-def create_test_session(db_path: Path, checklist_id: int, tester_name: str, started_at: str, run_id: Optional[int] = None) -> int:
+def create_test_session(db_path: Path, checklist_id: int, tester_name: str, started_at: str, run_id: Optional[int] = None, project_name: str = "Default Project") -> int:
     """Create a new test session."""
     con = _connect(db_path)
     try:
         cur = con.execute(
             """
-            INSERT INTO test_sessions (run_id, checklist_id, tester_name, started_at, status)
-            VALUES (?, ?, ?, ?, 'in-progress')
+            INSERT INTO test_sessions (run_id, checklist_id, tester_name, started_at, status, project_name)
+            VALUES (?, ?, ?, ?, 'in-progress', ?)
             """,
-            (run_id, checklist_id, tester_name, started_at),
+            (run_id, checklist_id, tester_name, started_at, project_name),
         )
         con.commit()
         row_id = cur.lastrowid
@@ -541,7 +697,7 @@ def get_test_session(db_path: Path, session_id: int) -> Optional[Dict[str, Any]]
     con = _connect(db_path)
     try:
         row = con.execute(
-            "SELECT id, run_id, checklist_id, tester_name, started_at, completed_at, status FROM test_sessions WHERE id = ?",
+            "SELECT id, run_id, checklist_id, tester_name, started_at, completed_at, status, project_name FROM test_sessions WHERE id = ?",
             (session_id,),
         ).fetchone()
         if not row:
@@ -554,6 +710,7 @@ def get_test_session(db_path: Path, session_id: int) -> Optional[Dict[str, Any]]
             "started_at": row[4],
             "completed_at": row[5],
             "status": row[6],
+            "project_name": row[7] if len(row) > 7 else "Default Project",
         }
     finally:
         con.close()
@@ -564,7 +721,7 @@ def list_test_sessions(db_path: Path, limit: int = 50) -> List[Dict[str, Any]]:
     con = _connect(db_path)
     try:
         rows = con.execute(
-            "SELECT id, run_id, checklist_id, tester_name, started_at, completed_at, status FROM test_sessions ORDER BY started_at DESC LIMIT ?",
+            "SELECT id, run_id, checklist_id, tester_name, started_at, completed_at, status, project_name FROM test_sessions ORDER BY started_at DESC LIMIT ?",
             (limit,),
         ).fetchall()
         return [
@@ -576,6 +733,7 @@ def list_test_sessions(db_path: Path, limit: int = 50) -> List[Dict[str, Any]]:
                 "started_at": row[4],
                 "completed_at": row[5],
                 "status": row[6],
+                "project_name": row[7] if len(row) > 7 else "Default Project",
             }
             for row in rows
         ]
@@ -785,5 +943,280 @@ def get_fix_metrics(db_path: Path) -> Dict[str, Any]:
             "fixed_issues": fixed,
             "avg_by_severity": by_severity
         }
+    finally:
+        con.close()
+
+
+# ============================================================================
+# MANUAL BUG TRACKING FUNCTIONS
+# ============================================================================
+
+def create_manual_bug(
+    db_path: Path,
+    title: str,
+    wcag_criterion: str,
+    severity: str,
+    testing_tool: str,
+    description: str,
+    expected_behavior: str,
+    actual_behavior: str,
+    project_name: str = "Default Project",
+    run_id: Optional[int] = None,
+    steps_to_reproduce: Optional[str] = None,
+    affected_user_groups: Optional[str] = None,
+    notes: Optional[str] = None,
+    created_by: Optional[str] = None
+) -> int:
+    """Create a new manual bug report."""
+    from datetime import datetime, timezone
+    
+    con = _connect(db_path)
+    try:
+        created_at = datetime.now(timezone.utc).isoformat()
+        cursor = con.execute(
+            """INSERT INTO manual_bugs (
+                title, wcag_criterion, severity, testing_tool, description,
+                expected_behavior, actual_behavior, steps_to_reproduce,
+                affected_user_groups, notes, project_name, run_id,
+                created_at, created_by, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')""",
+            (
+                title, wcag_criterion, severity, testing_tool, description,
+                expected_behavior, actual_behavior, steps_to_reproduce,
+                affected_user_groups, notes, project_name, run_id,
+                created_at, created_by
+            )
+        )
+        con.commit()
+        bug_id = cursor.lastrowid
+        if bug_id is None:
+            raise ValueError("Failed to create bug")
+        return int(bug_id)
+    finally:
+        con.close()
+
+
+def add_bug_evidence(
+    db_path: Path,
+    bug_id: int,
+    file_path: str,
+    file_type: str,
+    file_size: int
+) -> int:
+    """Add evidence file to a bug report."""
+    from datetime import datetime, timezone
+    
+    con = _connect(db_path)
+    try:
+        uploaded_at = datetime.now(timezone.utc).isoformat()
+        cursor = con.execute(
+            """INSERT INTO bug_evidence (bug_id, file_path, file_type, file_size, uploaded_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (bug_id, file_path, file_type, file_size, uploaded_at)
+        )
+        con.commit()
+        evidence_id = cursor.lastrowid
+        if evidence_id is None:
+            raise ValueError("Failed to add evidence")
+        return int(evidence_id)
+    finally:
+        con.close()
+
+
+def get_bug_projects(db_path: Path) -> List[str]:
+    """Get list of unique project names from bugs."""
+    con = _connect(db_path)
+    try:
+        query = """
+            SELECT DISTINCT project_name 
+            FROM manual_bugs 
+            WHERE project_name IS NOT NULL 
+            ORDER BY project_name
+        """
+        rows = con.execute(query).fetchall()
+        return [r[0] for r in rows if r[0]]
+    finally:
+        con.close()
+
+
+def list_manual_bugs(
+    db_path: Path,
+    project_name: Optional[str] = None,
+    testing_tool: Optional[str] = None,
+    severity: Optional[str] = None,
+    status: str = "open",
+    limit: int = 100
+) -> List[Dict[str, Any]]:
+    """List manual bugs with optional filters."""
+    con = _connect(db_path)
+    try:
+        query = """
+            SELECT 
+                b.id, b.title, b.wcag_criterion, b.severity, b.testing_tool,
+                b.description, b.expected_behavior, b.actual_behavior,
+                b.steps_to_reproduce, b.affected_user_groups, b.notes,
+                b.project_name, b.run_id, b.created_at, b.created_by, b.status,
+                COUNT(e.id) as evidence_count
+            FROM manual_bugs b
+            LEFT JOIN bug_evidence e ON b.id = e.bug_id
+            WHERE 1=1
+        """
+        params: List[Any] = []
+        
+        if project_name:
+            query += " AND b.project_name = ?"
+            params.append(project_name)
+        if testing_tool:
+            query += " AND b.testing_tool = ?"
+            params.append(testing_tool)
+        if severity:
+            query += " AND b.severity = ?"
+            params.append(severity)
+        if status:
+            query += " AND b.status = ?"
+            params.append(status)
+            
+        query += " GROUP BY b.id ORDER BY b.created_at DESC LIMIT ?"
+        params.append(limit)
+        
+        rows = con.execute(query, params).fetchall()
+        return [
+            {
+                "id": r[0],
+                "title": r[1],
+                "wcag_criterion": r[2],
+                "severity": r[3],
+                "testing_tool": r[4],
+                "description": r[5],
+                "expected_behavior": r[6],
+                "actual_behavior": r[7],
+                "steps_to_reproduce": r[8],
+                "affected_user_groups": r[9],
+                "notes": r[10],
+                "project_name": r[11],
+                "run_id": r[12],
+                "created_at": r[13],
+                "created_by": r[14],
+                "status": r[15],
+                "evidence_count": r[16]
+            }
+            for r in rows
+        ]
+    finally:
+        con.close()
+
+
+def get_manual_bug(db_path: Path, bug_id: int) -> Optional[Dict[str, Any]]:
+    """Get a single bug with evidence files."""
+    con = _connect(db_path)
+    try:
+        # Get bug details
+        row = con.execute(
+            """SELECT 
+                id, title, wcag_criterion, severity, testing_tool,
+                description, expected_behavior, actual_behavior,
+                steps_to_reproduce, affected_user_groups, notes,
+                project_name, run_id, created_at, created_by, status
+               FROM manual_bugs WHERE id = ?""",
+            (bug_id,)
+        ).fetchone()
+        
+        if not row:
+            return None
+            
+        # Get evidence files
+        evidence_rows = con.execute(
+            """SELECT id, file_path, file_type, file_size, uploaded_at
+               FROM bug_evidence WHERE bug_id = ?""",
+            (bug_id,)
+        ).fetchall()
+        
+        return {
+            "id": row[0],
+            "title": row[1],
+            "wcag_criterion": row[2],
+            "severity": row[3],
+            "testing_tool": row[4],
+            "description": row[5],
+            "expected_behavior": row[6],
+            "actual_behavior": row[7],
+            "steps_to_reproduce": row[8],
+            "affected_user_groups": row[9],
+            "notes": row[10],
+            "project_name": row[11],
+            "run_id": row[12],
+            "created_at": row[13],
+            "created_by": row[14],
+            "status": row[15],
+            "evidence": [
+                {
+                    "id": e[0],
+                    "file_path": e[1],
+                    "file_type": e[2],
+                    "file_size": e[3],
+                    "uploaded_at": e[4]
+                }
+                for e in evidence_rows
+            ]
+        }
+    finally:
+        con.close()
+
+
+def update_bug_status(db_path: Path, bug_id: int, status: str) -> bool:
+    """Update bug status (open, in_progress, resolved, closed)."""
+    con = _connect(db_path)
+    try:
+        cursor = con.execute(
+            "UPDATE manual_bugs SET status = ? WHERE id = ?",
+            (status, bug_id)
+        )
+        con.commit()
+        return cursor.rowcount > 0
+    finally:
+        con.close()
+
+
+def delete_manual_bug(db_path: Path, bug_id: int) -> bool:
+    """Delete a bug and its evidence (CASCADE)."""
+    con = _connect(db_path)
+    try:
+        cursor = con.execute("DELETE FROM manual_bugs WHERE id = ?", (bug_id,))
+        con.commit()
+        return cursor.rowcount > 0
+    finally:
+        con.close()
+
+
+def get_testing_method_stats(db_path: Path, project_name: Optional[str] = None) -> Dict[str, Any]:
+    """Get statistics for each testing method (NVDA, Keyboard, Zoom)."""
+    con = _connect(db_path)
+    try:
+        query = """
+            SELECT 
+                testing_tool,
+                COUNT(*) as bug_count,
+                MAX(created_at) as last_tested
+            FROM manual_bugs
+            WHERE 1=1
+        """
+        params: List[Any] = []
+        
+        if project_name:
+            query += " AND project_name = ?"
+            params.append(project_name)
+            
+        query += " GROUP BY testing_tool"
+        
+        rows = con.execute(query, params).fetchall()
+        
+        stats = {}
+        for row in rows:
+            stats[row[0]] = {
+                "bug_count": row[1],
+                "last_tested": row[2]
+            }
+        
+        return stats
     finally:
         con.close()

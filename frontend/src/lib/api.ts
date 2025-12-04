@@ -55,6 +55,21 @@ export async function listProjects() {
   }
 }
 
+export async function createProject(name: string, description?: string) {
+  const response = await axios.post('/api/projects', { name, description });
+  return response.data;
+}
+
+export async function cleanupDummyScans() {
+  const response = await axios.delete('/api/projects/cleanup');
+  return response.data;
+}
+
+export async function deleteProject(projectName: string) {
+  const response = await api.delete(`/projects/${encodeURIComponent(projectName)}`);
+  return response.data;
+}
+
 export async function getScan(id: number) {
   const res = await api.get(`/scans/${id}`)
   return res.data as Record<string, any>
@@ -127,16 +142,6 @@ export async function cleanupAICache() {
 export async function deleteScan(scanId: number) {
   const res = await api.delete(`/scans/${scanId}`)
   return res.data as { message: string; scan_id: number }
-}
-
-export async function deleteManualTestSession(sessionId: number) {
-  const res = await api.delete(`/manual-tests/${sessionId}`)
-  return res.data as { message: string; session_id: number }
-}
-
-export async function deleteChecklist(checklistId: number) {
-  const res = await api.delete(`/checklists/${checklistId}`)
-  return res.data as { message: string; checklist_id: number }
 }
 
 // Analytics

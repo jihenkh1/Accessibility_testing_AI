@@ -119,61 +119,77 @@ class ChecklistItem(BaseModel):
     estimated_time: Optional[int] = None  # Time estimate in minutes
 
 
-class ChecklistGenerateRequest(BaseModel):
-    page_type: str = Field(description="landing, form, dashboard, or ecommerce")
-    components: List[str] = Field(default=[], description="List of component names")
-    run_id: Optional[int] = Field(default=None, description="Optional: link to existing scan run")
+# ============================================================================
+# MANUAL BUG TRACKING SCHEMAS (V2)
+# ============================================================================
 
-
-class ChecklistResponse(BaseModel):
-    checklist_id: int
-    page_type: str
-    components: List[str]
-    total_items: int
-    categories: List[str]
-    priority_counts: Dict[str, int]
-    estimated_minutes: int
-    items: List[ChecklistItem]
-    created_at: str
-
-
-class TestSessionCreate(BaseModel):
-    checklist_id: int
-    tester_name: str
-    run_id: Optional[int] = None
-
-
-class TestSessionResponse(BaseModel):
-    id: int
-    run_id: Optional[int]
-    checklist_id: int
-    tester_name: str
-    started_at: str
-    completed_at: Optional[str]
-    status: str
-
-
-class TestResultRecord(BaseModel):
-    session_id: int
-    item_id: str
-    status: str = Field(description="passed, failed, needs_retest, skipped")
+class ManualBugCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=500, description="One-line bug summary")
+    wcag_criterion: str = Field(description="WCAG success criterion (e.g., 2.1.1, 1.4.3)")
+    severity: str = Field(description="Critical, High, Medium, or Low")
+    testing_tool: str = Field(description="NVDA, Keyboard, Zoom, or Other")
+    description: str = Field(min_length=1, description="What is broken")
+    expected_behavior: str = Field(min_length=1, description="What should happen")
+    actual_behavior: str = Field(min_length=1, description="What actually happens")
+    steps_to_reproduce: Optional[str] = None
+    affected_user_groups: Optional[str] = None
     notes: Optional[str] = None
+    project_name: str = "Default Project"
+    run_id: Optional[int] = None
+    created_by: Optional[str] = None
+
+    @field_validator("severity")
+    @classmethod
+    def validate_severity(cls, v: str) -> str:
+        allowed = ["Critical", "High", "Medium", "Low"]
+        if v not in allowed:
+            raise ValueError(f"Severity must be one of: {', '.join(allowed)}")
+        return v
+
+    @field_validator("testing_tool")
+    @classmethod
+    def validate_testing_tool(cls, v: str) -> str:
+        allowed = ["NVDA", "Keyboard", "Zoom", "Other"]
+        if v not in allowed:
+            raise ValueError(f"Testing tool must be one of: {', '.join(allowed)}")
+        return v
 
 
-class TestResultResponse(BaseModel):
+class ManualBugResponse(BaseModel):
     id: int
-    session_id: int
-    checklist_id: int
-    item_id: str
-    status: str
+    title: str
+    wcag_criterion: str
+    severity: str
+    testing_tool: str
+    description: str
+    expected_behavior: str
+    actual_behavior: str
+    steps_to_reproduce: Optional[str]
+    affected_user_groups: Optional[str]
     notes: Optional[str]
-    screenshot_path: Optional[str]
+    project_name: str
+    run_id: Optional[int]
     created_at: str
+    created_by: Optional[str]
+    status: str
+    evidence_count: int = 0
 
 
-class SessionResultsSummary(BaseModel):
-    session: TestSessionResponse
-    checklist: ChecklistResponse
-    results: List[TestResultResponse]
-    progress: Dict[str, int]  # passed, failed, needs_retest, skipped counts
+class ManualBugDetail(ManualBugResponse):
+    evidence: List[Dict[str, Any]] = []
+
+
+class BugEvidenceResponse(BaseModel):
+    id: int
+    bug_id: int
+    file_path: str
+    file_type: str
+    file_size: int
+    uploaded_at: str
+
+
+class TestingMethodStats(BaseModel):
+    tool: str
+    bug_count: int
+    last_tested: Optional[str]
 

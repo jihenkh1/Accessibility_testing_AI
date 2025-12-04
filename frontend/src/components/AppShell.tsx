@@ -14,7 +14,7 @@ const routeMap: Record<string, string> = {
   runs: '/runs',
   settings: '/settings',
   pipeline: '/pipeline',
-  'manual-testing': '/manual-testing/sessions',
+  'manual-testing': '/manual-testing',
 }
 
 function pageFromPath(pathname: string): string {

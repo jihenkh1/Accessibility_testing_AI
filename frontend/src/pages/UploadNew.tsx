@@ -1,5 +1,5 @@
 import { useRef, useState, useMemo } from 'react'
-import { Upload, FileJson, Sparkles, Loader2, Clock, Download } from 'lucide-react'
+import { Upload, FileJson, Sparkles, Loader2, Clock, Download, CheckCircle2 } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
@@ -7,9 +7,10 @@ import { Textarea } from '../components/ui/textarea'
 import { Progress } from '../components/ui/progress'
 import { Badge } from '../components/ui/badge'
 import { Input } from '../components/ui/input'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { postScan, listScans, listProjects } from '../lib/api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { postScan, listScans, listProjects, createProject as createProjectAPI } from '../lib/api'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 
 export default function UploadNew() {
   const [file, setFile] = useState<File | null>(null)
@@ -19,9 +20,35 @@ export default function UploadNew() {
   const [jsonText, setJsonText] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const { data: scans } = useQuery({ queryKey: ['scans'], queryFn: () => listScans() })
   const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: listProjects })
+
+  // Create project mutation for instant creation
+  const createProject = useMutation({
+    mutationFn: async (newProjectName: string) => {
+      return createProjectAPI(newProjectName)
+    },
+    onSuccess: (data, newProjectName) => {
+      // Invalidate queries to refresh project list
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      
+      // Update selected project and clear input
+      setProjectName(newProjectName)
+      setCustomProjectName('')
+      
+      toast.success('Project created!', {
+        description: `"${newProjectName}" is now available`
+      })
+    },
+    onError: (error: any) => {
+      const errorMsg = error.response?.data?.detail || error.message || 'Please try again'
+      toast.error('Failed to create project', {
+        description: errorMsg
+      })
+    }
+  })
 
   // Get pending scans and group by test cycle (within 5 minutes)
   const pendingScans = useMemo(() => {
@@ -87,6 +114,13 @@ export default function UploadNew() {
         url: file?.name || 'uploaded_file',
         project_name: finalProjectName
       })
+    },
+    onSuccess: () => {
+      // Clear custom project input and show success feedback
+      if (customProjectName.trim()) {
+        setProjectName(customProjectName.trim())
+        setCustomProjectName('')
+      }
     },
   })
 
@@ -215,10 +249,13 @@ export default function UploadNew() {
               </Select>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               <label htmlFor="project-select" className="text-sm font-medium">Project</label>
-              <div className="space-y-2">
-                <Select value={projectName} onValueChange={setProjectName}>
+              <div className="space-y-3">
+                <Select value={projectName} onValueChange={(val) => {
+                  setProjectName(val)
+                  setCustomProjectName('') // Clear custom input when selecting existing project
+                }}>
                   <SelectTrigger id="project-select">
                     <SelectValue placeholder="Select project" />
                   </SelectTrigger>
@@ -230,16 +267,44 @@ export default function UploadNew() {
                     ))}
                   </SelectContent>
                 </Select>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">or create new:</span>
+                
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">or create new</span>
+                  </div>
+                </div>
+                
+                <div className="space-y-1.5">
                   <Input
                     id="custom-project-input"
                     type="text"
-                    placeholder="Enter new project name"
+                    placeholder="Enter new project name and press Enter"
                     value={customProjectName}
                     onChange={(e) => setCustomProjectName(e.target.value)}
-                    className="flex-1"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && customProjectName.trim()) {
+                        e.preventDefault()
+                        createProject.mutate(customProjectName.trim())
+                      }
+                    }}
+                    className={customProjectName.trim() ? 'border-primary ring-1 ring-primary/20' : ''}
+                    disabled={createProject.isPending}
                   />
+                  {customProjectName.trim() && !createProject.isPending && (
+                    <p className="text-xs text-primary flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Press Enter to create: <strong>"{customProjectName.trim()}"</strong>
+                    </p>
+                  )}
+                  {createProject.isPending && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Creating project...
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

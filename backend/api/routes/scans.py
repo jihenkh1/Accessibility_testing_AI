@@ -11,6 +11,12 @@ from fastapi.responses import StreamingResponse, FileResponse
 from backend.schemas import AnalyzeRequest, AnalyzeResponse, ScanSummary, IssuesPage, IssueOut
 from backend.services.analyze import analyze_report
 from backend.services import db as dbsvc
+from pydantic import BaseModel
+
+
+class CreateProjectRequest(BaseModel):
+    name: str
+    description: str = ""
 
 
 router = APIRouter()
@@ -420,6 +426,63 @@ def list_projects() -> List[str]:
     try:
         projects = dbsvc.get_all_projects(DB_PATH)
         return projects if projects else ["Default Project"]
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/projects")
+def create_project(req: CreateProjectRequest) -> Dict[str, Any]:
+    """Create a new project"""
+    try:
+        # Validate project name
+        if not req.name or not req.name.strip():
+            raise HTTPException(status_code=400, detail="Project name cannot be empty")
+        
+        if len(req.name) > 200:
+            raise HTTPException(status_code=400, detail="Project name too long (max 200 chars)")
+        
+        project = dbsvc.create_project(DB_PATH, req.name.strip(), req.description)
+        return {
+            "success": True,
+            "project": project
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.delete("/projects/cleanup")
+def cleanup_dummy_scans() -> Dict[str, Any]:
+    """Remove old project_creation placeholder scans"""
+    try:
+        deleted_count = dbsvc.cleanup_project_creation_scans(DB_PATH)
+        return {
+            "success": True,
+            "deleted_count": deleted_count,
+            "message": f"Removed {deleted_count} project creation placeholder(s)"
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.delete("/projects/{project_name}")
+def delete_project(project_name: str) -> Dict[str, Any]:
+    """Delete a project and all its scans"""
+    try:
+        if not project_name or project_name == "Default Project":
+            raise HTTPException(status_code=400, detail="Cannot delete default project")
+        
+        result = dbsvc.delete_project(DB_PATH, project_name)
+        return {
+            "success": True,
+            "message": f"Deleted project '{project_name}' with {result['deleted_scans']} scan(s) and {result['deleted_bugs']} bug(s)",
+            "deleted_scans": result["deleted_scans"],
+            "deleted_bugs": result["deleted_bugs"],
+            "project_removed": result["project_removed"]
+        }
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
