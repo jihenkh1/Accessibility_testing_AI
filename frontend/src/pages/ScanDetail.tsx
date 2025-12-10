@@ -1,13 +1,13 @@
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getScan, analyzeExistingScan } from '../lib/api'
+import { getScan, analyzeExistingScan, listProjects } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Button } from '../components/ui/button'
 import { Badge } from '../components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import { Sparkles, Clock, FileJson, Download, Loader2, CheckCircle } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 export default function ScanDetail() {
   const { id } = useParams()
@@ -15,12 +15,23 @@ export default function ScanDetail() {
   const queryClient = useQueryClient()
   const [framework, setFramework] = useState('html')
   const [useAI, setUseAI] = useState(true)
+  const [projectName, setProjectName] = useState('Default Project')
   
   const { data, isLoading, error } = useQuery({ 
     queryKey: ['scan', scanId], 
     queryFn: () => getScan(scanId), 
     enabled: !Number.isNaN(scanId) 
   })
+  const { data: projectOptions } = useQuery({
+    queryKey: ['projects'],
+    queryFn: listProjects,
+  })
+
+  useEffect(() => {
+    if (data?.project_name) {
+      setProjectName(data.project_name)
+    }
+  }, [data?.project_name])
 
   const isPending = data && data.total_issues === 0
   const hasRawReport = data?.raw_report_json
@@ -34,6 +45,7 @@ export default function ScanDetail() {
         framework, 
         use_ai: useAI, 
         max_ai_issues: 50, 
+        project_name: projectName,
         url: data.url || `Scan #${scanId}` 
       })
     },
@@ -108,6 +120,20 @@ export default function ScanDetail() {
                   <SelectContent>
                     <SelectItem value="enabled">Enabled (50 issues)</SelectItem>
                     <SelectItem value="disabled">Disabled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2 col-span-2">
+                <label htmlFor="project-select" className="text-sm font-medium">Assign to project</label>
+                <Select value={projectName} onValueChange={setProjectName}>
+                  <SelectTrigger id="project-select">
+                    <SelectValue placeholder="Select project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(projectOptions?.length ? projectOptions : ['Default Project']).map((proj) => (
+                      <SelectItem key={proj} value={proj}>{proj}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

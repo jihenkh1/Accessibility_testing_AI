@@ -1,3 +1,4 @@
+import json
 from typing import List, Dict, Any
 
 from ..models import AccessibilityIssue
@@ -22,6 +23,37 @@ def parse_pa11y_report(report: Dict[str, Any]) -> List[AccessibilityIssue]:
         return issues
 
     for item in raw_issues:
+        # Accept strings by attempting to coerce to dict; otherwise store as plain description
+        if isinstance(item, str):
+            try:
+                parsed = json.loads(item)
+                if isinstance(parsed, dict):
+                    item = parsed
+                else:
+                    issues.append(
+                        AccessibilityIssue(
+                            id="pa11y:string",
+                            description=item,
+                            impact="moderate",
+                            elements=[],
+                        )
+                    )
+                    continue
+            except Exception:
+                issues.append(
+                    AccessibilityIssue(
+                        id="pa11y:string",
+                        description=item,
+                        impact="moderate",
+                        elements=[],
+                    )
+                )
+                continue
+
+        if not isinstance(item, dict):
+            # Unknown shape; skip instead of crashing
+            continue
+
         selector = item.get("selector", "")
         elements = [selector] if selector else []
         
@@ -39,4 +71,3 @@ def parse_pa11y_report(report: Dict[str, Any]) -> List[AccessibilityIssue]:
         )
 
     return issues
-

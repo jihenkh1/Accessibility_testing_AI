@@ -191,7 +191,7 @@ const IssueCard = ({
                 Fix Suggestion
                 <CopyButton text={issue.fix_suggestion} label="Copy" />
               </div>
-              <pre className="text-sm bg-card p-3 rounded-md border overflow-x-auto">
+              <pre className="text-sm bg-card p-3 rounded-md border whitespace-pre-wrap break-words overflow-auto">
                 <code>{issue.fix_suggestion}</code>
               </pre>
             </div>
@@ -209,13 +209,16 @@ const IssueCard = ({
               </div>
             )}
 
-            {/* Source Code */}
+            {/* Analysis Source */}
             {issue.source && (
               <div>
                 <div className="text-xs font-semibold text-muted-foreground uppercase mb-1 flex items-center justify-between">
-                  Source HTML
+                  Analysis Source
                   <CopyButton text={issue.source} label="Copy" />
                 </div>
+                <p className="text-xs text-muted-foreground mb-2">
+                  ai_enhanced = AI generated · rule_database = rule DB guidance · rule_based = fallback defaults
+                </p>
                 <pre className="text-sm bg-card p-3 rounded-md border overflow-x-auto max-h-32">
                   <code>{issue.source}</code>
                 </pre>
@@ -594,4 +597,3 @@ export default function RunIssues() {
     </div>
   )
 }
-

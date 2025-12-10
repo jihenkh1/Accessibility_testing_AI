@@ -1,17 +1,19 @@
 import os
 import requests
 import json
+import threading
 import logging
 import time
 import asyncio
 import aiohttp
 from threading import Lock
-from typing import Dict, Any, Optional, List, Literal
+from typing import Dict, Any, Optional, List, Literal, Union
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from dataclasses import dataclass, field
 
-from pydantic import BaseModel, Field, ValidationError
+
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 try:
     from dotenv import load_dotenv, find_dotenv  # type: ignore
@@ -28,20 +30,22 @@ PROMPT_VERSION = "v1"
 
 def _get_cfg(name: str, default: Optional[str] = None) -> Optional[str]:
     """
-    Resolve configuration from environment variables only.
-    
-    ⚠️ SECURITY: Does NOT cache sensitive values like API keys.
-    Always reads fresh from environment to avoid secrets in memory.
-    
-    Order: environment variable -> default
-    - .env is already loaded via python-dotenv at import time (if installed)
-    
+    Resolve configuration from environment variables (optionally populated by .env).
+
+    This helper only reads from the current process environment; it does not
+    itself cache or persist secrets. Callers may still store returned values
+    in memory (for example on a client instance).
+
+    Resolution order:
+    1. Environment variable with the given name
+    2. Provided default value (if any)
+
     Args:
-        name: Configuration variable name (e.g., 'OPENROUTER_API_KEY')
-        default: Default value if not found
-        
+        name: Configuration variable name (e.g., 'OPENROUTER_API_KEY').
+        default: Default to use if the variable is not set.
+
     Returns:
-        Configuration value or default
+        The configuration value or the default.
     """
     val = os.getenv(name)
     if val is not None and val != "":
@@ -53,8 +57,9 @@ class AIResponse(BaseModel):
     """Strict schema for AI enrichment output."""
     priority: Literal['critical', 'high', 'medium', 'low'] = Field(default='medium')
     user_impact: str = ""
-    fix_suggestion: str = ""
+    fix_suggestion: Union[str, List[str]] = Field(default_factory=list)
     effort_minutes: int = 15
+    effort_rationale: Optional[str] = None
 
     # Optional, richer fields for future UI enhancements
     code_example: Optional[str] = None
@@ -65,11 +70,31 @@ class AIResponse(BaseModel):
     personas_impact: Optional[Dict[str, str]] = None
     root_cause_hypothesis: Optional[str] = None
     component_guess: Optional[str] = None
-    fix_plan: Optional[Dict[str, List[str]]] = None
+    # Free-form per-selector or per-element plan items
+    fix_plan: List[Dict[str, Any]] = Field(default_factory=list)
     ticket_title: Optional[str] = None
     ticket_body: Optional[str] = None
     confidence: Optional[int] = None
     risk_level: Optional[str] = None
+
+    @field_validator("fix_suggestion", mode="before")
+    @classmethod
+    def coerce_fix_suggestion(cls, v: Any) -> List[str]:
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return [str(x) for x in v]
+        return [str(v)]
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def coerce_confidence(cls, v: Any) -> Optional[int]:
+        if v is None:
+            return None
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return None
 
 
 @dataclass
@@ -179,6 +204,7 @@ class SimpleAIClient:
         
         # Usage tracking - load from persistent storage
         self.usage_stats = UsageStats.load()
+        self._usage_lock = Lock()
         
         # Pricing per 1M tokens (update these based on your model)
         # For free models, these will be 0
@@ -266,40 +292,59 @@ class SimpleAIClient:
                 f"Example ({framework_norm}): {kb.get('example', '')}\n"
             )
 
-        # Few-shot style: a single compact example to calibrate output (not a strict template)
+        # Few-shot style: compact example to enforce structure and concrete fixes
         example_json = {
             "priority": "high",
-            "user_impact": "Screen reader and keyboard users cannot identify the control.",
-            "fix_suggestion": "Provide an accessible name via visible text or aria-label matching intent.",
-            "effort_minutes": 15,
-            "wcag_refs": ["WCAG 4.1.2"],
+            "user_impact": "Low-contrast text is hard to read for low-vision users.",
+            "fix_suggestion": "- Change body text color from #777777 to #595959 (4.6:1)\n- Update success badge text to #1E7B1E (4.5:1)\n- Re-test in WebAIM Contrast Checker",
+            "effort_minutes": 20,
+            "effort_rationale": "3 CSS variable updates with re-test",
+            "wcag_refs": ["WCAG 1.4.3"],
             "acceptance_criteria": [
-                "Button announces a meaningful name to screen readers.",
-                "Visible label or aria-label reflects the control purpose."
+                "All text meets >=4.5:1 (normal) or 3:1 (large)",
+                "No contrast issues reported by axe/pa11y"
             ],
             "test_steps": [
-                "Navigate to the control using Tab.",
-                "Verify screen reader announces a descriptive name."
+                "Open page, run WebAIM Contrast Checker on body text and badges",
+                "Run axe DevTools; confirm no 1.4.3 failures"
+            ],
+            "fix_plan": [
+                {
+                    "selector": ".body-text",
+                    "current_fg": "#777777",
+                    "current_bg": "#FFFFFF",
+                    "current_ratio": "2.8:1",
+                    "recommended_fg": "#595959",
+                    "recommended_ratio": "4.6:1"
+                }
             ]
         }
 
         prompt = (
-            "You are an expert web accessibility consultant. Analyze this issue and return strict JSON.\n\n"
+            "You are an expert web accessibility consultant. Return STRICT JSON only.\n"
+            "Keep answers concise and actionable.\n\n"
             f"ISSUE: {issue_description}\n{elements_text}\n{impact_text}\n\n"
             f"Knowledge (use if relevant):\n{kb_text}\n"
-            "Output JSON with these fields (use sensible defaults when unknown):\n"
+            "Required JSON fields:\n"
             "- priority: critical|high|medium|low\n"
-            "- user_impact: short explanation for real users\n"
-            "- fix_suggestion: specific action for the given framework\n"
-            "- effort_minutes: integer estimate (5-240)\n"
-            "- wcag_refs: list of WCAG references (e.g., WCAG 1.1.1)\n"
-            "- acceptance_criteria: list of concrete, testable criteria\n"
-            "- test_steps: list of succinct steps for manual testing\n"
-            "- code_example: optional short code snippet if helpful\n"
-            "- component_guess, root_cause_hypothesis: optional\n\n"
-            f"Example (for style only, do not copy literally): {json.dumps(example_json)}\n\n"
+            "- user_impact: 1-2 sentences, plain language\n"
+            "- fix_suggestion: array of short strings; each string is a concrete action (include selectors/values when possible)\n"
+            "- effort_minutes: integer 5-240\n"
+            "- effort_rationale: short reason for the effort estimate\n"
+            "- wcag_refs: list of WCAG refs (e.g., \"WCAG 1.4.3\")\n"
+            "- acceptance_criteria: list of testable outcomes\n"
+            "- test_steps: list of quick verify steps\n"
+            "- automation_hints: list (optional)\n"
+            "- code_example: short snippet if helpful (optional)\n"
+            "- fix_plan: array of objects for specific selectors/fields. For color issues, include selector, current_fg, current_bg, current_ratio, recommended_fg, recommended_bg (if applicable), recommended_ratio.\n"
+            "- component_guess, root_cause_hypothesis, ticket_title/ticket_body, confidence, risk_level: optional\n\n"
+            "Rules:\n"
+            "- Be specific: include selectors or attributes if provided.\n"
+            "- For contrast issues: propose actual color values and ratios if any hint is available; otherwise describe the exact steps to pick compliant colors.\n"
+            "- Keep text short; no prose outside JSON. Do not emit markdown or YAML bullets outside JSON arrays.\n\n"
+            f"Example (style only): {json.dumps(example_json)}\n\n"
             f"Prompt-Version: {PROMPT_VERSION}\n"
-            "Respond with ONLY valid JSON, no other text."
+            "Respond with ONLY valid JSON, no extra text."
         )
         return prompt
 
@@ -491,13 +536,22 @@ class SimpleAIClient:
                         choices = data.get('choices') or []
                         if not choices:
                             logger.error("API response has no choices field")
-                            self.usage_stats.add_failure()
+                            with self._usage_lock:
+                                self.usage_stats.add_failure()
                             return None
                         message = choices[0].get('message') or {}
-                        content = message.get('content')
-                        if not isinstance(content, str):
-                            logger.error("API response content missing or not a string")
-                            self.usage_stats.add_failure()
+                        content_raw = message.get('content')
+                        # OpenRouter usually returns a string, but be permissive
+                        if isinstance(content_raw, str):
+                            content = content_raw
+                        elif isinstance(content_raw, (dict, list)):
+                            # Some providers return structured content; serialize for downstream parser
+                            content = json.dumps(content_raw)
+                        else:
+                            logger.error(f"API response content missing or unexpected type: {type(content_raw)}")
+                            logger.debug(f"Full message payload: {message}")
+                            with self._usage_lock:
+                                self.usage_stats.add_failure()
                             return None
                         
                         # Extract usage information from response
@@ -512,7 +566,8 @@ class SimpleAIClient:
                         )
                         
                         # Track usage
-                        self.usage_stats.add_usage(prompt_tokens, completion_tokens, cost)
+                        with self._usage_lock:
+                            self.usage_stats.add_usage(prompt_tokens, completion_tokens, cost)
                         
                         logger.debug(
                             f"API call successful (took {response.elapsed.total_seconds():.2f}s, "
@@ -522,13 +577,15 @@ class SimpleAIClient:
                         return content
                     except Exception as e:
                         logger.error(f"Unexpected response format: {e}")
-                        self.usage_stats.add_failure()
+                        with self._usage_lock:
+                            self.usage_stats.add_failure()
                         return None
                 
                 elif response.status_code == 429:
                     # Rate limit hit - the retry logic already handled retries
                     logger.warning(f"Rate limit exceeded even after retries: {response.text}")
-                    self.usage_stats.add_failure()
+                    with self._usage_lock:
+                        self.usage_stats.add_failure()
                     return None
                 
                 else:
@@ -539,20 +596,24 @@ class SimpleAIClient:
                         logger.error(f"API error details: {error_data}")
                     except Exception:
                         pass
-                    self.usage_stats.add_failure()
+                    with self._usage_lock:
+                        self.usage_stats.add_failure()
                     return None
 
             except requests.exceptions.Timeout:
                 logger.error(f"API request timed out after {self.timeout}s")
-                self.usage_stats.add_failure()
+                with self._usage_lock:
+                    self.usage_stats.add_failure()
                 return None
             except requests.exceptions.ConnectionError as e:
                 logger.error(f"Connection error - check internet connection: {e}")
-                self.usage_stats.add_failure()
+                with self._usage_lock:
+                    self.usage_stats.add_failure()
                 return None
             except Exception as e:
                 logger.error(f"API request failed: {e}")
-                self.usage_stats.add_failure()
+                with self._usage_lock:
+                    self.usage_stats.add_failure()
                 return None
 
     def _parse_ai_response(self, response_text: str) -> Dict[str, Any]:
@@ -594,21 +655,31 @@ class SimpleAIClient:
                 validated = AIResponse(**parsed_raw)
             except ValidationError as ve:
                 logger.warning(f"AI response validation failed, using fallback: {ve.errors()}")
-                return self._get_fallback_response()
+                logger.debug(f"Raw AI payload (first 500 chars): {str(parsed_raw)[:500]}")
+                fb = self._get_fallback_response()
+                fb["__fallback__"] = True
+                return fb
 
             # Clamp effort_minutes to a reasonable range
             if validated.effort_minutes < 1 or validated.effort_minutes > 240:
                 validated.effort_minutes = 15
 
-            return validated.dict()
+            result = validated.dict()
+            result["__fallback__"] = False
+            return result
 
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse AI response as JSON: {e}")
             logger.debug(f"Raw response (first 500 chars): {response_text[:500]}")
-            return self._get_fallback_response()
+            fb = self._get_fallback_response()
+            fb["__fallback__"] = True
+            return fb
         except Exception as e:
             logger.error(f"Unexpected error parsing AI response: {e}")
-            return self._get_fallback_response()
+            logger.debug(f"Raw response (first 500 chars): {response_text[:500]}")
+            fb = self._get_fallback_response()
+            fb["__fallback__"] = True
+            return fb
 
     def _get_fallback_response(self) -> Dict[str, Any]:
         """Provide a sensible fallback when AI fails"""
@@ -633,6 +704,10 @@ class SimpleAIClient:
         except Exception as e:
             logger.error(f"Connection test failed: {e}")
             return False
+        
+
+    
+    
 
     # =====================================================
     # ASYNC API METHODS (for batch processing)
@@ -673,13 +748,15 @@ class SimpleAIClient:
                         choices = data.get('choices') or []
                         if not choices:
                             logger.error("API response has no choices field")
-                            self.usage_stats.add_failure()
+                            with self._usage_lock:
+                                self.usage_stats.add_failure()
                             return None
                         message = choices[0].get('message') or {}
                         content = message.get('content')
                         if not isinstance(content, str):
                             logger.error("API response content missing or not a string")
-                            self.usage_stats.add_failure()
+                            with self._usage_lock:
+                                self.usage_stats.add_failure()
                             return None
                         
                         # Extract usage information
@@ -694,7 +771,8 @@ class SimpleAIClient:
                         )
                         
                         # Track usage
-                        self.usage_stats.add_usage(prompt_tokens, completion_tokens, cost)
+                        with self._usage_lock:
+                            self.usage_stats.add_usage(prompt_tokens, completion_tokens, cost)
                         
                         logger.debug(
                             f"Async API call successful "
@@ -704,27 +782,32 @@ class SimpleAIClient:
                         return content
                     except Exception as e:
                         logger.error(f"Unexpected response format: {e}")
-                        self.usage_stats.add_failure()
+                        with self._usage_lock:
+                            self.usage_stats.add_failure()
                         return None
                 
                 elif response.status == 429:
                     logger.warning(f"Rate limit exceeded: {await response.text()}")
-                    self.usage_stats.add_failure()
+                    with self._usage_lock:
+                        self.usage_stats.add_failure()
                     return None
                 
                 else:
                     error_text = await response.text()
                     logger.error(f"API error {response.status}: {error_text}")
-                    self.usage_stats.add_failure()
+                    with self._usage_lock:
+                        self.usage_stats.add_failure()
                     return None
 
         except asyncio.TimeoutError:
             logger.error(f"Async API request timed out after {self.timeout}s")
-            self.usage_stats.add_failure()
+            with self._usage_lock:
+                self.usage_stats.add_failure()
             return None
         except Exception as e:
             logger.error(f"Async API request failed: {e}")
-            self.usage_stats.add_failure()
+            with self._usage_lock:
+                self.usage_stats.add_failure()
             return None
 
     async def analyze_accessibility_issue_async(
@@ -759,6 +842,39 @@ class SimpleAIClient:
             return None
 
         return self._parse_ai_response(response_text)
+    
+    def close(self) -> None:
+        """
+        Clean up underlying HTTP resources.
+
+        Safe to call multiple times.
+        """
+        try:
+            if hasattr(self, "session") and self.session is not None:
+                self.session.close()
+        except Exception as exc:
+            logger.debug("Error while closing HTTP session: %s", exc)
+
+    def __enter__(self) -> "SimpleAIClient":
+        """
+        Allow usage as a context manager:
+
+            with SimpleAIClient() as client:
+                ...
+
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
+    
+
+
+
+
+
+
     
     async def analyze_batch_async(
         self,
@@ -814,4 +930,3 @@ class SimpleAIClient:
         logger.info(f"Current usage stats: {self.get_usage_stats()}")
         
         return results
-

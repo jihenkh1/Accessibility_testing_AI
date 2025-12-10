@@ -287,6 +287,30 @@
     "effort_minutes": 2,
     "requires_ai": false
   },
+  "aria-valid-attr": {
+    "title": "ARIA attributes must have valid names",
+    "description": "Ensures attributes that begin with aria- are valid ARIA attributes for the element",
+    "wcag": ["4.1.2"],
+    "wcag_level": "A",
+    "severity": "serious",
+    "impact_score": 82,
+    "user_impact": "Invalid or unsupported aria-* attributes are ignored by assistive tech, so users miss intended semantics or announcements.",
+    "common_causes": [
+      "Typos in aria-* attribute names (e.g., aria-lable, aria-describeby)",
+      "Using non-existent aria-* attributes",
+      "Applying state attributes on elements that do not support them"
+    ],
+    "fix_by_framework": {
+      "html": "<!-- Bad: invalid aria-* attribute on a select -->\n<select aria-unkown=\"true\"></select>\n\n<!-- Good: remove or replace with a valid attribute -->\n<select aria-label=\"Choose an option\"></select>",
+      "react": "<select aria-label=\"Choose an option\">...</select>",
+      "vue": "<select aria-label=\"Choose an option\">...</select>",
+      "angular": "<select aria-label=\"Choose an option\">...</select>",
+      "svelte": "<select aria-label=\"Choose an option\">...</select>"
+    },
+    "explanation": "Remove misspelled or unsupported aria-* attributes and only use valid ARIA attributes appropriate for the element and its role.",
+    "effort_minutes": 2,
+    "requires_ai": false
+  },
   "input-button-name": {
     "title": "Input buttons must have discernible text",
     "description": "Ensures input buttons have discernible text",

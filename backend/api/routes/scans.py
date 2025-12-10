@@ -173,6 +173,7 @@ def post_scan(req: AnalyzeRequest) -> AnalyzeResponse:
 def analyze_existing_scan(scan_id: int, req: AnalyzeRequest) -> AnalyzeResponse:
     """Analyze an existing pending scan and update it with results"""
     # Analyze
+    project_override = req.model_dump(exclude_unset=True).get("project_name")
     result = analyze_report(
         report=req.report,
         framework=req.framework,
@@ -186,7 +187,7 @@ def analyze_existing_scan(scan_id: int, req: AnalyzeRequest) -> AnalyzeResponse:
     # Update the existing scan with analysis results
     try:
         # Update the scan summary with analysis results
-        dbsvc.update_run_summary(DB_PATH, scan_id, summary)
+        dbsvc.update_run_summary(DB_PATH, scan_id, summary, project_override)
         # Clear old issues and insert new ones
         dbsvc.delete_run_issues(DB_PATH, scan_id)
         dbsvc.insert_run_issues(DB_PATH, scan_id, issues)
@@ -702,4 +703,3 @@ def delete_checklist(checklist_id: int) -> Dict[str, Any]:
         return {"message": "Checklist deleted successfully", "checklist_id": checklist_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete checklist: {str(e)}")
-

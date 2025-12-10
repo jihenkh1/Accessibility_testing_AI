@@ -193,7 +193,11 @@ class AccessibilityAnalyzer:
                     self._ai_calls_used += 1
                     processed_groups += 1  # Count attempted group to enforce budget
                     # Persist if AI provided data - store full payload from ai_analysis
-                    if getattr(self, "_persistent_cache", None) is not None and ei.ai_analysis is not None:
+                    if (
+                        getattr(self, "_persistent_cache", None) is not None
+                        and ei.ai_analysis is not None
+                        and getattr(ei, "analysis_source", "") == "ai_enhanced"
+                    ):
                         try:
                             pkey = AICache.make_key(*(list(key) + [self._framework, PROMPT_VERSION]))
                             payload = self._ai_analysis_to_raw(ei.ai_analysis)
@@ -354,6 +358,15 @@ class AccessibilityAnalyzer:
                     rule_id=issue.id,
                     framework=getattr(self, "_framework", "html"),
                 ) or {}
+                fallback_used = bool(ai_raw.pop("__fallback__", False)) or not ai_raw
+                if fallback_used:
+                    logger.warning(f"AI returned empty/fallback response for {issue.id}")
+
+                def as_text(v: Any) -> str:
+                    if isinstance(v, list):
+                        return "\n".join(str(x) for x in v)
+                    return str(v)
+
                 # Coerce/validate AI fields defensively
                 prio_raw = (ai_raw.get("priority") or "medium").lower()
                 try:
@@ -390,7 +403,7 @@ class AccessibilityAnalyzer:
                 ai_analysis = AIAnalysis(
                     priority=prio,
                     user_impact=str(ai_raw.get("user_impact", "")),
-                    fix_suggestion=str(ai_raw.get("fix_suggestion", "")),
+                    fix_suggestion=as_text(ai_raw.get("fix_suggestion", "")),
                     effort_minutes=effort_val,
                     code_example=as_opt_str(ai_raw.get("code_example")),
                     wcag_refs=as_list_str(ai_raw.get("wcag_refs")),
@@ -406,7 +419,7 @@ class AccessibilityAnalyzer:
                     confidence=as_opt_int(ai_raw.get("confidence")),
                     risk_level=as_opt_str(ai_raw.get("risk_level")),
                 )
-                analysis_source = "ai_enhanced"
+                analysis_source = "ai_fallback" if fallback_used else "ai_enhanced"
             except Exception as e:
                 logger.warning(f"AI enhancement failed for {issue.id}: {e}")
                 # Increment failure count and possibly disable AI for the rest of the run

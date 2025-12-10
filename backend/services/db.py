@@ -415,8 +415,8 @@ def insert_run_issues(db_path: Path, run_id: int, issues: List[Dict[str, Any]]) 
         con.close()
 
 
-def update_run_summary(db_path: Path, run_id: int, summary: Dict[str, Any]) -> None:
-    """Update an existing run with new analysis summary data"""
+def update_run_summary(db_path: Path, run_id: int, summary: Dict[str, Any], project_name: Optional[str] = None) -> None:
+    """Update an existing run with new analysis summary data and optionally project assignment"""
     con = _connect(db_path)
     try:
         con.execute(
@@ -428,7 +428,8 @@ def update_run_summary(db_path: Path, run_id: int, summary: Dict[str, Any]) -> N
                 medium_issues = ?,
                 low_issues = ?,
                 estimated_total_time_minutes = ?,
-                ai_enhanced_issues = ?
+                ai_enhanced_issues = ?,
+                project_name = COALESCE(?, project_name)
             WHERE id = ?
             """,
             (
@@ -439,6 +440,7 @@ def update_run_summary(db_path: Path, run_id: int, summary: Dict[str, Any]) -> N
                 summary.get("minor", 0),
                 summary.get("estimated_total_time_minutes", 0),
                 summary.get("ai_enhanced_issues", 0),
+                project_name,
                 run_id,
             ),
         )

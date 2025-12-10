@@ -957,14 +957,14 @@ export default function DashboardNew() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="flex-1 justify-between text-xs group/btn hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:border-amber-400 dark:hover:border-amber-600 transition-all"
+                                className="flex-1 justify-between text-xs group/btn hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:border-amber-400 dark:hover:border-amber-600 transition-all min-w-0"
                                 onClick={() => navigate(`/scan/${scan.id}`)}
                               >
-                                <span className="truncate flex items-center gap-2">
+                                <span className="truncate flex items-center gap-2 min-w-0">
                                   <span className="w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center text-[10px] font-bold">
                                     {index + 1}
                                   </span>
-                                  {scan.url.split('/').pop() || scan.url}
+                                  <span className="truncate">{scan.url.split('/').pop() || scan.url}</span>
                                 </span>
                                 <span className="ml-2 group-hover/btn:translate-x-1 transition-transform">→</span>
                               </Button>
