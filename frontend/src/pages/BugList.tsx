@@ -16,7 +16,6 @@ interface Bug {
   wcag_criterion: string;
   severity: string;
   testing_tool: string;
-  status: string;
   created_at: string;
   project_name: string;
   evidence_count: number;
@@ -24,7 +23,6 @@ interface Bug {
 
 async function fetchBugs(filters: any) {
   const params = new URLSearchParams();
-  if (filters.status && filters.status !== 'all') params.append('status', filters.status);
   if (filters.severity && filters.severity !== 'all') params.append('severity', filters.severity);
   if (filters.tool && filters.tool !== 'all') params.append('testing_tool', filters.tool);
   if (filters.project) params.append('project_name', filters.project);
@@ -37,7 +35,6 @@ async function fetchBugs(filters: any) {
 function BugList() {
   const navigate = useNavigate();
   const [filters, setFilters] = useState({
-    status: 'all',
     severity: 'all',
     tool: 'all',
     project: '',
@@ -79,14 +76,7 @@ function BugList() {
     Low: 'secondary',
   };
 
-  const statusColors: Record<string, 'destructive' | 'default' | 'secondary' | 'outline'> = {
-    open: 'destructive',
-    in_progress: 'default',
-    resolved: 'secondary',
-    closed: 'outline',
-  };
-
-  const hasActiveFilters = filters.status !== 'all' || filters.severity !== 'all' || 
+  const hasActiveFilters = filters.severity !== 'all' || 
                           filters.tool !== 'all' || filters.project || filters.search;
 
   return (
@@ -112,7 +102,7 @@ function BugList() {
           <CardDescription>Filter and search bug reports</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -122,19 +112,6 @@ function BugList() {
                 className="pl-9"
               />
             </div>
-
-            <Select value={filters.status} onValueChange={value => setFilters({ ...filters, status: value })}>
-              <SelectTrigger>
-                <SelectValue placeholder="All Statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="open">Open</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="resolved">Resolved</SelectItem>
-                <SelectItem value="closed">Closed</SelectItem>
-              </SelectContent>
-            </Select>
 
             <Select value={filters.severity} onValueChange={value => setFilters({ ...filters, severity: value })}>
               <SelectTrigger>
@@ -173,7 +150,7 @@ function BugList() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setFilters({ status: 'all', severity: 'all', tool: 'all', project: '', search: '' })}
+              onClick={() => setFilters({ severity: 'all', tool: 'all', project: '', search: '' })}
               className="mt-2"
             >
               Clear Filters
@@ -199,7 +176,6 @@ function BugList() {
                   <TableHead>WCAG</TableHead>
                   <TableHead>Severity</TableHead>
                   <TableHead>Tool</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead>Project</TableHead>
                   <TableHead>Evidence</TableHead>
                   <TableHead>Created</TableHead>
@@ -221,11 +197,6 @@ function BugList() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary">{bug.testing_tool}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={statusColors[bug.status] as any}>
-                        {bug.status.replace('_', ' ')}
-                      </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{bug.project_name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">

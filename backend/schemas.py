@@ -171,7 +171,6 @@ class ManualBugResponse(BaseModel):
     run_id: Optional[int]
     created_at: str
     created_by: Optional[str]
-    status: str
     evidence_count: int = 0
 
 
@@ -192,4 +191,3 @@ class TestingMethodStats(BaseModel):
     tool: str
     bug_count: int
     last_tested: Optional[str]
-

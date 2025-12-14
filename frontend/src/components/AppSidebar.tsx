@@ -43,30 +43,11 @@ export function AppSidebar({ currentPage, onPageChange, collapsed, onCollapsedCh
 
   return (
     <div className={`${collapsed ? 'w-16' : 'w-64'} border-r border-sidebar-border bg-sidebar min-h-screen flex flex-col transition-all duration-300 relative`}>
-      {/* Header / Brand */}
-      <div className="h-16 px-6 border-b border-sidebar-border flex items-center gap-3">
-        <button
-          onClick={() => onPageChange('dashboard')}
-          className="flex items-center gap-3 hover:opacity-90 transition-opacity cursor-pointer"
-          title="AccessTest"
-        >
-          <div className="w-10 h-10 rounded-lg bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
-            A
-          </div>
-          {!collapsed && (
-            <div className="leading-tight">
-              <div className="text-sidebar-foreground font-semibold">AccessTest</div>
-              <div className="text-xs text-muted-foreground">Accessibility Assistant</div>
-            </div>
-          )}
-        </button>
-      </div>
-
       {/* Collapse Toggle Button */}
       <Button
         variant="ghost"
         size="sm"
-        className="absolute -right-3 top-20 h-6 w-6 rounded-full border border-sidebar-border bg-sidebar shadow-md hover:bg-sidebar-accent z-10 p-0"
+        className="absolute -right-3 top-4 h-6 w-6 rounded-full border border-sidebar-border bg-sidebar shadow-md hover:bg-sidebar-accent z-10 p-0"
         onClick={() => onCollapsedChange(!collapsed)}
         aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >

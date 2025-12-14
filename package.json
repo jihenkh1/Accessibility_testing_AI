@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "@uidotdev/usehooks": "^2.4.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.23.26",
+    "tailwind-merge": "^3.4.0",
+    "tailwindcss-animate": "^1.0.7",
+    "tailwindcss-hero-patterns": "^0.1.2"
+  }
+}

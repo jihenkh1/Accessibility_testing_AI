@@ -490,7 +490,8 @@ export default function DashboardNew() {
 
   return (
     <TooltipProvider>
-    <main className="relative max-w-6xl mx-auto px-6 py-10 space-y-10">
+    <main className="w-full px-10 py-10 space-y-10">
+
       
       {isLoading && (
         <div className="space-y-6">
@@ -585,7 +586,7 @@ export default function DashboardNew() {
                 <div className="flex flex-wrap items-center gap-2 justify-end">
                   {projects && projects.length > 0 && (
                     <Select value={selectedProject} onValueChange={setSelectedProject}>
-                      <SelectTrigger className="w-[220px] h-9 focus-visible:ring-[hsl(var(--accent))] focus-visible:ring-offset-2">
+                      <SelectTrigger className="w-[220px] h-9 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2">
                         <SelectValue placeholder="Select project" />
                       </SelectTrigger>
                       <SelectContent>
@@ -626,21 +627,6 @@ export default function DashboardNew() {
                       )}
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <Button
-                    className="gap-2 min-w-[160px] bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground, var(--primary-foreground)))] hover:bg-[hsl(var(--accent-dark,var(--accent)))] focus-visible:ring-[hsl(var(--accent))] focus-visible:ring-offset-2"
-                    onClick={() => navigate('/manual-testing')}
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    Start Manual Testing
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="gap-2 min-w-[150px] border-[hsl(var(--accent))]/70 text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent))]/10 focus-visible:ring-[hsl(var(--accent))] focus-visible:ring-offset-2"
-                    onClick={() => navigate('/upload')}
-                  >
-                    <Upload className="h-4 w-4" />
-                    Upload New Scan
-                  </Button>
                 </div>
               </section>
 
@@ -716,7 +702,7 @@ export default function DashboardNew() {
             </MotionCard>
 
             {criticalPreview.length > 0 ? (
-              <MotionCard variants={itemVariants} className="p-6 space-y-3 rounded-2xl border border-destructive/60 bg-[hsl(var(--destructive-soft))] shadow-sm hover:shadow-md transition-shadow">
+            <MotionCard variants={itemVariants} className="p-6 space-y-3 rounded-2xl border border-destructive/60 bg-[color:var(--destructive-soft)] shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <h2 className="text-lg font-semibold tracking-tight flex items-center gap-2 text-destructive">
@@ -744,14 +730,20 @@ export default function DashboardNew() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="effort">~{issue.effort} min</Badge>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => latest && navigate(`/scan/${latest.id}/issues?severity=critical`)}
-                        className="gap-2"
-                      >
-                        Fix Now
-                      </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => latest && navigate(`/scan/${latest.id}/issues?severity=critical`)}
+                    className="
+                                gap-2
+                                bg-destructive text-destructive-foreground
+                                hover:bg-destructive/90
+                                dark:bg-red-800 dark:hover:bg-red-800 dark:text-white
+                                "
+                              >
+  Fix Now
+</Button>
+
                     </div>
                   </div>
                 ))}
@@ -812,7 +804,7 @@ export default function DashboardNew() {
             </MotionCard>
 
                 {quickWins.length > 0 ? (
-              <MotionCard variants={itemVariants} className="p-6 space-y-3 rounded-2xl border border-[hsl(var(--success))]/60 bg-[hsl(var(--success-soft))] shadow-sm hover:shadow-md transition-shadow">
+            <MotionCard variants={itemVariants} className="p-6 space-y-3 rounded-2xl border border-[color:var(--success)]/60 bg-[color:var(--success-soft)] shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between">
                   <div>
                     <h2 className="text-lg font-semibold tracking-tight flex items-center gap-2">
@@ -862,13 +854,19 @@ export default function DashboardNew() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="flex items-center gap-2">
-                    <Search className="h-4 w-4 text-muted-foreground" />
-                    <Input
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search rule or selector"
-                      className="h-9 w-[240px]"
-                    />
+                    <Search className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                    <div className="flex flex-col">
+                      <label htmlFor="issues-search-input" className="sr-only">
+                        Search rule or selector
+                      </label>
+                      <Input
+                        id="issues-search-input"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search rule or selector"
+                        className="h-9 w-[240px]"
+                      />
+                    </div>
                   </div>
                   <Select value={severityFilter} onValueChange={setSeverityFilter}>
                     <SelectTrigger className="h-9 w-[140px]">
@@ -886,8 +884,8 @@ export default function DashboardNew() {
               </div>
                 <Tabs defaultValue="summary">
                   <TabsList className="w-full sm:w-auto">
-                    <TabsTrigger value="summary" className="flex-1 sm:flex-none data-[state=active]:text-[hsl(var(--accent))] data-[state=active]:border-b-2 data-[state=active]:border-[hsl(var(--accent))] rounded-none">Summary</TabsTrigger>
-                    <TabsTrigger value="issues" className="flex-1 sm:flex-none data-[state=active]:text-[hsl(var(--accent))] data-[state=active]:border-b-2 data-[state=active]:border-[hsl(var(--accent))] rounded-none">Issues Table</TabsTrigger>
+                    <TabsTrigger value="summary" className="flex-1 sm:flex-none data-[state=active]:text-[color:var(--accent)] data-[state=active]:border-b-2 data-[state=active]:border-[color:var(--accent)] rounded-none">Summary</TabsTrigger>
+                    <TabsTrigger value="issues" className="flex-1 sm:flex-none data-[state=active]:text-[color:var(--accent)] data-[state=active]:border-b-2 data-[state=active]:border-[color:var(--accent)] rounded-none">Issues Table</TabsTrigger>
                   </TabsList>
                 <TabsContent value="summary" className="space-y-4 pt-4">
                   <div className="grid gap-4 md:grid-cols-2">
@@ -912,26 +910,6 @@ export default function DashboardNew() {
                 </TabsContent>
                 <TabsContent value="issues" className="pt-4">
                   <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Select value={sortBy} onValueChange={(value: typeof sortBy) => setSortBy(value)}>
-                        <SelectTrigger className="h-9 w-[180px]">
-                          <SelectValue placeholder="Sort by" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="severity">Sort by Severity</SelectItem>
-                          <SelectItem value="instances">Sort by Instances</SelectItem>
-                          <SelectItem value="effort">Sort by Effort</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Button variant="ghost" size="sm" className="gap-2" onClick={() => downloadCSV(sorted)}>
-                        <FileSpreadsheet className="h-4 w-4" />
-                        Export CSV
-                      </Button>
-                      <Button variant="ghost" size="sm" className="gap-2" onClick={() => downloadJSON(sorted)}>
-                        <FileJson className="h-4 w-4" />
-                        Export JSON
-                      </Button>
-                    </div>
                     <div className="rounded-lg border">
                       <Table>
                         <TableHeader>

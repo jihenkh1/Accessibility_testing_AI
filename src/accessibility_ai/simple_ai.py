@@ -27,6 +27,71 @@ logger = logging.getLogger(__name__)
 # Version tag for prompt templates; bump when changing prompt shape materially
 PROMPT_VERSION = "v1"
 
+# Translation table to normalize curly quotes and apostrophes
+_SMART_QUOTE_TRANSLATION = str.maketrans({
+    "“": '"',
+    "”": '"',
+    "„": '"',
+    "‟": '"',
+    "’": "'",
+    "‘": "'",
+    "‚": "'",
+    "‛": "'",
+})
+
+
+def _normalize_unicode_quotes(text: str) -> str:
+    """Replace curly quotes/apostrophes with ASCII equivalents."""
+    if not text:
+        return text
+    return text.translate(_SMART_QUOTE_TRANSLATION)
+
+
+def _escape_control_chars_inside_strings(text: str) -> str:
+    """
+    Escape raw newline/tab characters that may appear inside quoted strings.
+
+    Some frontier models occasionally emit literal newlines within JSON strings.
+    Python's json module rejects these as invalid, so we proactively escape them.
+    """
+    if not text:
+        return text
+
+    escaped: List[str] = []
+    in_string = False
+    escape = False
+    replacements = {
+        "\n": "\\n",
+        "\r": "\\r",
+        "\t": "\\t",
+    }
+
+    for ch in text:
+        if ch == '"' and not escape:
+            in_string = not in_string
+            escaped.append(ch)
+            continue
+
+        if in_string and ch in replacements:
+            escaped.append(replacements[ch])
+            escape = False
+            continue
+
+        escaped.append(ch)
+        if ch == "\\" and not escape:
+            escape = True
+        else:
+            escape = False
+
+    return "".join(escaped)
+
+
+def _clean_json_text(text: str) -> str:
+    """Normalize unicode quotes and escape control chars inside JSON strings."""
+    text = _normalize_unicode_quotes(text)
+    text = _escape_control_chars_inside_strings(text)
+    return text
+
 
 def _get_cfg(name: str, default: Optional[str] = None) -> Optional[str]:
     """
@@ -83,7 +148,15 @@ class AIResponse(BaseModel):
         if v is None:
             return []
         if isinstance(v, list):
-            return [str(x) for x in v]
+            return [str(x).strip() for x in v if str(x).strip()]
+        if isinstance(v, str):
+            normalized = v.replace("\r", "")
+            parts = [part.strip(" •-\t") for part in normalized.split("\n")]
+            cleaned = [part for part in parts if part]
+            if cleaned:
+                return cleaned
+            stripped = normalized.strip()
+            return [stripped] if stripped else []
         return [str(v)]
 
     @field_validator("confidence", mode="before")
@@ -632,10 +705,11 @@ class SimpleAIClient:
                 cleaned_text = cleaned_text[:-3]  # Remove ```
             
             cleaned_text = cleaned_text.strip()
+            cleaned_text = _clean_json_text(cleaned_text)
 
             # Try to parse JSON
             try:
-                parsed_raw = json.loads(cleaned_text)
+                parsed_raw = json.loads(cleaned_text, strict=False)
             except json.JSONDecodeError as e:
                 # Try to fix common JSON issues
                 logger.debug(f"Initial JSON parse failed: {e}, attempting cleanup...")
@@ -646,7 +720,8 @@ class SimpleAIClient:
                 
                 if start_idx != -1 and end_idx != -1:
                     cleaned_text = cleaned_text[start_idx:end_idx + 1]
-                    parsed_raw = json.loads(cleaned_text)
+                    cleaned_text = _clean_json_text(cleaned_text)
+                    parsed_raw = json.loads(cleaned_text, strict=False)
                 else:
                     raise  # Re-raise if we can't fix it
 

@@ -22,6 +22,13 @@ export default function Settings() {
     applyTheme(themeName, dark)
   }, [themeName, dark])
 
+  const handleDarkToggle = (checked: boolean) => {
+    const saved = getStoredTheme()
+    setThemeName(saved.themeName)
+    setDark(checked)
+    applyTheme(saved.themeName, checked)
+  }
+
   return (
     <div className="max-w-6xl mx-auto space-y-6 p-6">
       <div>
@@ -53,11 +60,16 @@ export default function Settings() {
                   <Label htmlFor="dark-mode">Dark mode</Label>
                   <p className="text-xs text-muted-foreground">Use the dark color scheme</p>
                 </div>
-                <Switch id="dark-mode" checked={dark} onCheckedChange={setDark} aria-label="Toggle dark mode" />
+                <Switch
+                  id="dark-mode"
+                  checked={dark}
+                  onCheckedChange={handleDarkToggle}
+                  aria-label="Toggle dark mode"
+                />
               </div>
 
               <div className="pt-2">
-                <ThemeShowcase onThemeSelect={setThemeName} />
+                <ThemeShowcase onThemeSelect={setThemeName} isDark={dark} />
               </div>
             </CardContent>
           </Card>

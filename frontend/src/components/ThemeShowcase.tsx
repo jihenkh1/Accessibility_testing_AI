@@ -6,19 +6,43 @@ import { useEffect, useState } from 'react'
 
 type Props = {
   onThemeSelect?: (themeName: string) => void
+  isDark?: boolean
 }
 
-export function ThemeShowcase({ onThemeSelect }: Props) {
+export function ThemeShowcase({ onThemeSelect, isDark }: Props) {
   const stored = getStoredTheme()
   const [current, setCurrent] = useState(stored.themeName)
+  const [isDarkMode, setIsDarkMode] = useState(
+    typeof isDark === 'boolean' ? isDark : stored.isDark,
+  )
 
   useEffect(() => {
-    applyTheme(current, stored.isDark)
+    if (typeof isDark === 'boolean') {
+      setIsDarkMode(isDark)
+    }
+  }, [isDark])
+
+  useEffect(() => {
+    applyTheme(current, isDarkMode)
+  }, [current, isDarkMode])
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'accesstest-theme' && event.newValue) {
+        setCurrent(event.newValue)
+      }
+      if (event.key === 'accesstest-dark-mode' && event.newValue !== null) {
+        setIsDarkMode(event.newValue === 'true')
+      }
+    }
+
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
   }, [])
 
   const choose = (name: string) => {
     setCurrent(name)
-    applyTheme(name, stored.isDark)
+    applyTheme(name, isDarkMode)
     onThemeSelect?.(name)
   }
 

@@ -36,9 +36,17 @@ const api = {
     axios.get(`/api/manual-testing-v2/checklists/${tool}`).then(res => res.data),
   fetchTestingMethodStats: () => 
     axios.get('/api/manual-testing-v2/testing-methods/stats').then(res => res.data),
-  fetchBugs: (filters?: any) => {
-    const params = new URLSearchParams(filters).toString();
-    return axios.get(`/api/manual-testing-v2/bugs?${params}`).then(res => res.data);
+  fetchBugs: (filters?: Record<string, any>) => {
+    const cleaned = Object.entries(filters || {}).reduce((acc, [key, value]) => {
+      if (value === undefined || value === null || value === '' || value === 'all') {
+        return acc;
+      }
+      acc[key] = String(value);
+      return acc;
+    }, {} as Record<string, string>);
+    const params = new URLSearchParams(cleaned);
+    const query = params.toString();
+    return axios.get(`/api/manual-testing-v2/bugs${query ? `?${query}` : ''}`).then(res => res.data);
   },
   fetchAutomatedContext: (projectName?: string) => {
     const params = projectName ? `?project_name=${encodeURIComponent(projectName)}` : '';
@@ -159,8 +167,8 @@ export default function ManualTestingDashboard() {
   });
 
   const bugFilters = selectedProject !== 'all' 
-    ? { status: 'open', limit: 10, project_name: selectedProject } 
-    : { status: 'open', limit: 10 };
+    ? { limit: 10, project_name: selectedProject } 
+    : { limit: 10 };
 
   const { data: bugs = [] } = useQuery({
     queryKey: ['manual-bugs', selectedProject],

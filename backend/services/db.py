@@ -1046,7 +1046,6 @@ def list_manual_bugs(
     project_name: Optional[str] = None,
     testing_tool: Optional[str] = None,
     severity: Optional[str] = None,
-    status: str = "open",
     limit: int = 100
 ) -> List[Dict[str, Any]]:
     """List manual bugs with optional filters."""
@@ -1057,7 +1056,7 @@ def list_manual_bugs(
                 b.id, b.title, b.wcag_criterion, b.severity, b.testing_tool,
                 b.description, b.expected_behavior, b.actual_behavior,
                 b.steps_to_reproduce, b.affected_user_groups, b.notes,
-                b.project_name, b.run_id, b.created_at, b.created_by, b.status,
+                b.project_name, b.run_id, b.created_at, b.created_by,
                 COUNT(e.id) as evidence_count
             FROM manual_bugs b
             LEFT JOIN bug_evidence e ON b.id = e.bug_id
@@ -1074,10 +1073,6 @@ def list_manual_bugs(
         if severity:
             query += " AND b.severity = ?"
             params.append(severity)
-        if status:
-            query += " AND b.status = ?"
-            params.append(status)
-            
         query += " GROUP BY b.id ORDER BY b.created_at DESC LIMIT ?"
         params.append(limit)
         
@@ -1099,8 +1094,7 @@ def list_manual_bugs(
                 "run_id": r[12],
                 "created_at": r[13],
                 "created_by": r[14],
-                "status": r[15],
-                "evidence_count": r[16]
+                "evidence_count": r[15]
             }
             for r in rows
         ]
@@ -1118,7 +1112,7 @@ def get_manual_bug(db_path: Path, bug_id: int) -> Optional[Dict[str, Any]]:
                 id, title, wcag_criterion, severity, testing_tool,
                 description, expected_behavior, actual_behavior,
                 steps_to_reproduce, affected_user_groups, notes,
-                project_name, run_id, created_at, created_by, status
+                project_name, run_id, created_at, created_by
                FROM manual_bugs WHERE id = ?""",
             (bug_id,)
         ).fetchone()
@@ -1149,7 +1143,6 @@ def get_manual_bug(db_path: Path, bug_id: int) -> Optional[Dict[str, Any]]:
             "run_id": row[12],
             "created_at": row[13],
             "created_by": row[14],
-            "status": row[15],
             "evidence": [
                 {
                     "id": e[0],
@@ -1161,20 +1154,6 @@ def get_manual_bug(db_path: Path, bug_id: int) -> Optional[Dict[str, Any]]:
                 for e in evidence_rows
             ]
         }
-    finally:
-        con.close()
-
-
-def update_bug_status(db_path: Path, bug_id: int, status: str) -> bool:
-    """Update bug status (open, in_progress, resolved, closed)."""
-    con = _connect(db_path)
-    try:
-        cursor = con.execute(
-            "UPDATE manual_bugs SET status = ? WHERE id = ?",
-            (status, bug_id)
-        )
-        con.commit()
-        return cursor.rowcount > 0
     finally:
         con.close()
 

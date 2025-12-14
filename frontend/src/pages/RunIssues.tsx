@@ -358,13 +358,10 @@ export default function RunIssues() {
                 </label>
               ))}
             </div>
-            <label htmlFor="rule-id-filter" className="sr-only">Filter by Rule ID</label>
-            <input id="rule-id-filter" className="border bg-input-background border-input rounded-md px-3 py-2 text-sm text-foreground" placeholder="Rule ID" value={ruleId} onChange={e => setRuleId(e.target.value)} />
             <label htmlFor="search-filter" className="sr-only">Search issues</label>
             <input id="search-filter" className="border bg-input-background border-input rounded-md px-3 py-2 text-sm min-w-[260px] text-foreground" placeholder="Search" value={q} onChange={e => setQ(e.target.value)} />
             <Button onClick={applyFilters}>Apply</Button>
-            <a className="underline text-primary" href={csvUrl} target="_blank" rel="noopener">Export CSV</a>
-            <RouterLink className="underline" to={`/dashboard`}>Back</RouterLink>
+            <RouterLink className="underline" to={`/runs`}>Back</RouterLink>
           </div>
         </CardContent>
       </Card>

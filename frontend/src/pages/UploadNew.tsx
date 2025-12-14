@@ -136,7 +136,7 @@ export default function UploadNew() {
   }
 
   return (
-    <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
+    <main className="max-w-7xl mx-auto px-4 lg:px-8 py-10 space-y-10">
       <div className="rounded-2xl bg-muted/40 p-8 space-y-8 relative overflow-hidden">
         <div className="absolute inset-0 opacity-[0.03] bg-[radial-gradient(circle_at_top,rgba(0,0,0,0.4),transparent)] pointer-events-none" aria-hidden />
 
@@ -309,7 +309,7 @@ export default function UploadNew() {
 
             <div className="flex flex-wrap items-center gap-3">
               <Button
-                className="gap-2 min-w-[180px] bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground,var(--primary-foreground)))] hover:bg-[hsl(var(--accent-dark,var(--accent)))] focus-visible:ring-[hsl(var(--accent))] focus-visible:ring-offset-2"
+                className="gap-2 min-w-[180px] bg-[color:var(--accent)] text-[color:var(--accent-foreground,var(--primary-foreground))] hover:bg-[color:var(--accent-dark,var(--accent))] focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2"
                 onClick={() => {
                   setLatestScanId(null)
                   analyze.mutate()

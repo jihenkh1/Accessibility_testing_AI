@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Alert, AlertDescription } from '../components/ui/alert';
-import { ArrowLeft, ExternalLink, Download, FileText, Image, Video, Music, AlertCircle } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Download, FileText, Image, Video, Music, AlertCircle, ClipboardCopy } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface BugDetail {
   id: number;
@@ -15,7 +15,6 @@ interface BugDetail {
   wcag_criterion: string;
   severity: string;
   testing_tool: string;
-  status: string;
   description: string;
   expected_behavior: string;
   actual_behavior: string;
@@ -37,8 +36,6 @@ interface BugDetail {
 
 const bugApi = {
   fetch: (id: string) => axios.get(`/api/manual-testing-v2/bugs/${id}`).then((res) => res.data),
-  updateStatus: (id: string, status: string) =>
-    axios.patch(`/api/manual-testing-v2/bugs/${id}/status`, { status }).then((res) => res.data),
   delete: (id: string) => axios.delete(`/api/manual-testing-v2/bugs/${id}`).then((res) => res.data),
 };
 
@@ -55,18 +52,74 @@ const formatFileSize = (bytes: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+const buildJiraTemplate = (bug: BugDetail) => {
+  const lines: string[] = [];
+
+  lines.push(`h2. Accessibility Bug Report`);
+  lines.push(`*Title:* ${bug.title}`);
+  lines.push(`*Project:* ${bug.project_name}`);
+  lines.push(`*Severity:* ${bug.severity}`);
+  lines.push(`*WCAG:* ${bug.wcag_criterion}`);
+  lines.push(`*Testing tool:* ${bug.testing_tool}`);
+  if (bug.created_by) lines.push(`*Reported by:* ${bug.created_by}`);
+  lines.push(`*Reported at:* ${new Date(bug.created_at).toLocaleString()}`);
+
+  if (bug.run_id) lines.push(`*Related scan:* #${bug.run_id}`);
+
+  lines.push('');
+  lines.push(`h3. What is broken`);
+  lines.push(bug.description || '-');
+
+  lines.push('');
+  lines.push(`h3. Expected behavior`);
+  lines.push(bug.expected_behavior || '-');
+
+  lines.push('');
+  lines.push(`h3. Actual behavior`);
+  lines.push(bug.actual_behavior || '-');
+
+  lines.push('');
+  lines.push(`h3. Steps to reproduce`);
+  lines.push(
+    bug.steps_to_reproduce?.trim()
+      ? bug.steps_to_reproduce
+      : 'Not provided (manual review required)'
+  );
+
+  if (bug.affected_user_groups?.trim()) {
+    lines.push('');
+    lines.push(`h3. Affected users`);
+    lines.push(bug.affected_user_groups);
+  }
+
+  if (bug.notes?.trim()) {
+    lines.push('');
+    lines.push(`h3. Additional notes`);
+    lines.push(bug.notes);
+  }
+
+  if (bug.evidence?.length) {
+    lines.push('');
+    lines.push(`h3. Evidence`);
+    bug.evidence.forEach((ev) => {
+      const filename = ev.file_path.split('/').pop() || ev.file_path;
+      const downloadUrl = `${window.location.origin}/api/manual-testing-v2/bugs/${bug.id}/evidence/${ev.id}/download`;
+      lines.push(`- ${filename} (${ev.file_type}, ${formatFileSize(ev.file_size)}): ${downloadUrl}`);
+    });
+  }
+
+  lines.push('');
+  lines.push(`---`);
+  lines.push(`Generated from AccessTest (Manual Testing)`);
+
+  return lines.join('\n');
+};
+
 const severityColors: Record<string, 'destructive' | 'default' | 'secondary'> = {
   Critical: 'destructive',
   High: 'destructive',
   Medium: 'default',
   Low: 'secondary',
-};
-
-const statusColors: Record<string, 'destructive' | 'default' | 'secondary' | 'outline'> = {
-  open: 'destructive',
-  in_progress: 'default',
-  resolved: 'secondary',
-  closed: 'outline',
 };
 
 const getErrorMessage = (err: any, fallback: string) => {
@@ -76,69 +129,17 @@ const getErrorMessage = (err: any, fallback: string) => {
   return fallback;
 };
 
-const safeStatusVariant = (status?: string) =>
-  status && statusColors[status] ? statusColors[status] : 'outline';
-
-const formatStatusLabel = (status?: string) =>
-  (status ?? 'unknown').replace(/_/g, ' ').toUpperCase();
-
 export default function BugDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
-  // Local status so UI updates immediately + stays stable
-  const [statusValue, setStatusValue] = useState<string>('open');
-
   const { data: bug, isLoading } = useQuery({
     queryKey: ['bug', id],
     queryFn: () => bugApi.fetch(id!),
     enabled: !!id,
   });
-
-  // Keep local status synced when bug loads/changes
-  useEffect(() => {
-    if (bug?.status) setStatusValue(bug.status);
-  }, [bug?.status]);
-
-  const statusMutation = useMutation({
-    mutationFn: (newStatus: string) => bugApi.updateStatus(id!, newStatus),
-
-    // Optimistic update (best practice)
-    onMutate: async (newStatus) => {
-      setError(null);
-      await queryClient.cancelQueries({ queryKey: ['bug', id] });
-
-      const previousBug = queryClient.getQueryData<BugDetail>(['bug', id]);
-
-      // Update UI + cache immediately
-      setStatusValue(newStatus);
-      queryClient.setQueryData(['bug', id], (old: any) =>
-        old ? { ...old, status: newStatus } : old
-      );
-
-      return { previousBug };
-    },
-
-    onError: (err: any, _newStatus, ctx) => {
-      // Rollback on error
-      if (ctx?.previousBug) {
-        queryClient.setQueryData(['bug', id], ctx.previousBug);
-        setStatusValue(ctx.previousBug.status);
-      }
-      setError(getErrorMessage(err, 'Failed to update status'));
-    },
-
-    onSuccess: (updatedBug) => {
-      // If backend returns updated bug, keep it as truth
-      if (updatedBug) queryClient.setQueryData(['bug', id], updatedBug);
-
-      queryClient.invalidateQueries({ queryKey: ['bugs'] });
-      queryClient.invalidateQueries({ queryKey: ['testing-method-stats'] });
-    },
-  });
-
   const deleteMutation = useMutation({
     mutationFn: () => bugApi.delete(id!),
     onSuccess: () => navigate('/manual-testing-v2/bugs'),
@@ -148,6 +149,27 @@ export default function BugDetail() {
   const handleDelete = () => {
     if (confirm('Are you sure you want to delete this bug? This cannot be undone.')) {
       deleteMutation.mutate();
+    }
+  };
+
+  const handleCopyForJira = async () => {
+    if (!bug) return;
+    const jiraText = buildJiraTemplate(bug);
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(jiraText);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = jiraText;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      toast.success('Copied Jira-ready summary');
+    } catch (copyError) {
+      console.error(copyError);
+      toast.error('Unable to copy bug details');
     }
   };
 
@@ -278,30 +300,22 @@ export default function BugDetail() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Status</CardTitle>
+              <CardTitle>Share with Jira</CardTitle>
+              <CardDescription>Copy a structured summary for an external ticket</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Badge variant={safeStatusVariant(statusValue) as any} className="mb-2">
-                  {formatStatusLabel(statusValue)}
-                </Badge>
-              </div>
-
-              <Select
-                value={statusValue}
-                onValueChange={(value) => statusMutation.mutate(value)}
-                disabled={statusMutation.isPending}
+            <CardContent className="space-y-3">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-center gap-2"
+                onClick={handleCopyForJira}
               >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="open">Open</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="resolved">Resolved</SelectItem>
-                  <SelectItem value="closed">Closed</SelectItem>
-                </SelectContent>
-              </Select>
+                <ClipboardCopy className="w-4 h-4" />
+                Copy for Jira
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Includes severity, WCAG reference, expected vs. actual behaviour, and reproduction steps.
+              </p>
             </CardContent>
           </Card>
 

@@ -194,7 +194,6 @@ async def list_bugs(
     project_name: Optional[str] = None,
     testing_tool: Optional[str] = None,
     severity: Optional[str] = None,
-    status: str = "open",
     limit: int = 100
 ):
     """
@@ -206,7 +205,6 @@ async def list_bugs(
             project_name=project_name,
             testing_tool=testing_tool,
             severity=severity,
-            status=status,
             limit=limit
         )
         return [ManualBugResponse(**bug) for bug in bugs]
@@ -328,30 +326,6 @@ async def download_evidence(bug_id: int, evidence_id: int):
         filename=file_path.name,
         media_type="application/octet-stream"
     )
-
-
-@router.patch("/bugs/{bug_id}/status")
-async def update_bug_status(bug_id: int, status: str):
-    """
-    Update bug status.
-    Allowed values: open, in_progress, resolved, closed
-    """
-    allowed_statuses = ["open", "in_progress", "resolved", "closed"]
-    if status not in allowed_statuses:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid status. Must be one of: {', '.join(allowed_statuses)}"
-        )
-    
-    try:
-        success = db.update_bug_status(DB_PATH, bug_id, status)
-        if not success:
-            raise HTTPException(status_code=404, detail="Bug not found")
-        return {"success": True, "status": status}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/bugs/{bug_id}")
