@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
@@ -36,10 +36,10 @@ interface BugDetail {
 }
 
 const bugApi = {
-  fetch: (id: string) => axios.get(`/api/manual-testing-v2/bugs/${id}`).then(res => res.data),
-  updateStatus: (id: string, status: string) => 
-    axios.patch(`/api/manual-testing-v2/bugs/${id}/status`, { status }).then(res => res.data),
-  delete: (id: string) => axios.delete(`/api/manual-testing-v2/bugs/${id}`).then(res => res.data),
+  fetch: (id: string) => axios.get(`/api/manual-testing-v2/bugs/${id}`).then((res) => res.data),
+  updateStatus: (id: string, status: string) =>
+    axios.patch(`/api/manual-testing-v2/bugs/${id}/status`, { status }).then((res) => res.data),
+  delete: (id: string) => axios.delete(`/api/manual-testing-v2/bugs/${id}`).then((res) => res.data),
 };
 
 const getFileIcon = (fileType: string) => {
@@ -69,11 +69,27 @@ const statusColors: Record<string, 'destructive' | 'default' | 'secondary' | 'ou
   closed: 'outline',
 };
 
+const getErrorMessage = (err: any, fallback: string) => {
+  const detail = err?.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) return detail.map((d: any) => d?.msg).filter(Boolean).join(', ');
+  return fallback;
+};
+
+const safeStatusVariant = (status?: string) =>
+  status && statusColors[status] ? statusColors[status] : 'outline';
+
+const formatStatusLabel = (status?: string) =>
+  (status ?? 'unknown').replace(/_/g, ' ').toUpperCase();
+
 export default function BugDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+
+  // Local status so UI updates immediately + stays stable
+  const [statusValue, setStatusValue] = useState<string>('open');
 
   const { data: bug, isLoading } = useQuery({
     queryKey: ['bug', id],
@@ -81,20 +97,52 @@ export default function BugDetail() {
     enabled: !!id,
   });
 
+  // Keep local status synced when bug loads/changes
+  useEffect(() => {
+    if (bug?.status) setStatusValue(bug.status);
+  }, [bug?.status]);
+
   const statusMutation = useMutation({
-    mutationFn: (status: string) => bugApi.updateStatus(id!, status),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bug', id] });
+    mutationFn: (newStatus: string) => bugApi.updateStatus(id!, newStatus),
+
+    // Optimistic update (best practice)
+    onMutate: async (newStatus) => {
+      setError(null);
+      await queryClient.cancelQueries({ queryKey: ['bug', id] });
+
+      const previousBug = queryClient.getQueryData<BugDetail>(['bug', id]);
+
+      // Update UI + cache immediately
+      setStatusValue(newStatus);
+      queryClient.setQueryData(['bug', id], (old: any) =>
+        old ? { ...old, status: newStatus } : old
+      );
+
+      return { previousBug };
+    },
+
+    onError: (err: any, _newStatus, ctx) => {
+      // Rollback on error
+      if (ctx?.previousBug) {
+        queryClient.setQueryData(['bug', id], ctx.previousBug);
+        setStatusValue(ctx.previousBug.status);
+      }
+      setError(getErrorMessage(err, 'Failed to update status'));
+    },
+
+    onSuccess: (updatedBug) => {
+      // If backend returns updated bug, keep it as truth
+      if (updatedBug) queryClient.setQueryData(['bug', id], updatedBug);
+
       queryClient.invalidateQueries({ queryKey: ['bugs'] });
       queryClient.invalidateQueries({ queryKey: ['testing-method-stats'] });
     },
-    onError: (err: any) => setError(err.response?.data?.detail || 'Failed to update status'),
   });
 
   const deleteMutation = useMutation({
     mutationFn: () => bugApi.delete(id!),
     onSuccess: () => navigate('/manual-testing-v2/bugs'),
-    onError: (err: any) => setError(err.response?.data?.detail || 'Failed to delete bug'),
+    onError: (err: any) => setError(getErrorMessage(err, 'Failed to delete bug')),
   });
 
   const handleDelete = () => {
@@ -210,7 +258,12 @@ export default function BugDetail() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => window.open(`/api/manual-testing-v2/bugs/${bug.id}/evidence/${file.id}/download`, '_blank')}
+                        onClick={() =>
+                          window.open(
+                            `/api/manual-testing-v2/bugs/${bug.id}/evidence/${file.id}/download`,
+                            '_blank'
+                          )
+                        }
                       >
                         <Download className="w-4 h-4" />
                       </Button>
@@ -229,13 +282,13 @@ export default function BugDetail() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Badge variant={statusColors[bug.status] as any} className="mb-2">
-                  {bug.status.replace('_', ' ').toUpperCase()}
+                <Badge variant={safeStatusVariant(statusValue) as any} className="mb-2">
+                  {formatStatusLabel(statusValue)}
                 </Badge>
               </div>
 
               <Select
-                value={bug.status}
+                value={statusValue}
                 onValueChange={(value) => statusMutation.mutate(value)}
                 disabled={statusMutation.isPending}
               >
@@ -261,6 +314,7 @@ export default function BugDetail() {
                 <p className="text-muted-foreground">Project</p>
                 <p className="font-medium">{bug.project_name}</p>
               </div>
+
               {bug.run_id && (
                 <div>
                   <p className="text-muted-foreground">Related Scan</p>
@@ -274,12 +328,18 @@ export default function BugDetail() {
                   </Button>
                 </div>
               )}
+
               <div>
                 <p className="text-muted-foreground">WCAG Reference</p>
                 <Button
                   variant="link"
                   className="p-0 h-auto"
-                  onClick={() => window.open(`https://www.w3.org/WAI/WCAG21/Understanding/${bug.wcag_criterion.replace('.', '')}.html`, '_blank')}
+                  onClick={() =>
+                    window.open(
+                      `https://www.w3.org/WAI/WCAG21/Understanding/${bug.wcag_criterion.replace('.', '')}.html`,
+                      '_blank'
+                    )
+                  }
                 >
                   Understanding {bug.wcag_criterion}
                   <ExternalLink className="w-3 h-3 ml-1" />

@@ -1,7 +1,7 @@
 import { useRef, useState, useMemo } from 'react'
-import { Upload, FileJson, Sparkles, Loader2, Clock, Download, CheckCircle2 } from 'lucide-react'
+import { Upload, FileJson, Sparkles, Loader2, Clock, Download, CheckCircle2, Layers } from 'lucide-react'
 import { Button } from '../components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card'
+import { CardContent, CardTitle, CardDescription } from '../components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import { Textarea } from '../components/ui/textarea'
 import { Progress } from '../components/ui/progress'
@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { postScan, listScans, listProjects, createProject as createProjectAPI } from '../lib/api'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import MotionCard from '../components/MotionCard'
 
 export default function UploadNew() {
   const [file, setFile] = useState<File | null>(null)
@@ -18,6 +19,7 @@ export default function UploadNew() {
   const [projectName, setProjectName] = useState('Default Project')
   const [customProjectName, setCustomProjectName] = useState('')
   const [jsonText, setJsonText] = useState('')
+  const [latestScanId, setLatestScanId] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -115,12 +117,16 @@ export default function UploadNew() {
         project_name: finalProjectName
       })
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       // Clear custom project input and show success feedback
       if (customProjectName.trim()) {
         setProjectName(customProjectName.trim())
         setCustomProjectName('')
       }
+      if (data?.scan_id) {
+        setLatestScanId(data.scan_id)
+      }
+      queryClient.invalidateQueries({ queryKey: ['scans'] })
     },
   })
 
@@ -130,62 +136,70 @@ export default function UploadNew() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="mb-2">Upload & Analyze</h1>
-        <p className="text-muted-foreground">Upload your accessibility scan results for intelligent analysis</p>
-      </div>
+    <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
+      <div className="rounded-2xl bg-muted/40 p-8 space-y-8 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-[0.03] bg-[radial-gradient(circle_at_top,rgba(0,0,0,0.4),transparent)] pointer-events-none" aria-hidden />
 
-      {/* Pending Scans Section */}
-      {groupedPendingScans.length > 0 && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
+        <header className="flex flex-wrap items-start justify-between gap-4 relative">
+          <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-amber-600 dark:text-amber-500" />
-              <h2 className="text-xl font-semibold">Pending Analysis</h2>
+              <h1 className="text-2xl font-semibold tracking-tight">Upload & Analyze</h1>
             </div>
-            <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
-              {groupedPendingScans.reduce((sum, group) => sum + group.length, 0)} report{groupedPendingScans.reduce((sum, group) => sum + group.length, 0) !== 1 ? 's' : ''} waiting
-            </Badge>
+            <p className="text-sm text-muted-foreground">
+              Upload your accessibility scan results for intelligent analysis
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground">
-            These reports have been uploaded but not analyzed yet. Reports from the same test cycle are grouped together.
-          </p>
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate('/dashboard')}>
+            <Layers className="h-4 w-4" />
+            Back to Dashboard
+          </Button>
+        </header>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {groupedPendingScans.map((group, groupIndex) => {
-              const firstScan = group[0]
-              const testDate = new Date(firstScan.ts).toLocaleString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              })
-              
-              return (
-                <Card key={`group-${groupIndex}`} className="border-2 border-amber-500/50 hover:shadow-lg transition-shadow">
-                  <CardHeader>
+        {groupedPendingScans.length > 0 && (
+          <MotionCard className="p-6 space-y-4 rounded-xl border border-amber-400/60 bg-amber-100/40 dark:bg-amber-900/20 shadow-sm hover:shadow-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                <h2 className="text-lg font-semibold tracking-tight">Pending Analysis</h2>
+              </div>
+              <Badge variant="secondary" className="bg-amber-500/80 text-amber-950 dark:bg-amber-400 dark:text-amber-950">
+                {groupedPendingScans.reduce((sum, group) => sum + group.length, 0)} report{groupedPendingScans.reduce((sum, group) => sum + group.length, 0) !== 1 ? 's' : ''} waiting
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              These reports have been uploaded but not analyzed yet. Reports from the same test cycle are grouped together.
+            </p>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {groupedPendingScans.map((group, groupIndex) => {
+                const firstScan = group[0]
+                const testDate = new Date(firstScan.ts).toLocaleString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+                
+                return (
+                  <MotionCard key={`group-${groupIndex}`} className="p-4 space-y-3 rounded-xl border border-amber-400/50 bg-card shadow-sm hover:shadow-md">
                     <div className="flex items-start justify-between">
-                      <FileJson className="h-5 w-5 text-amber-600 dark:text-amber-500" />
-                      <Badge className="text-xs bg-amber-500">Test Cycle</Badge>
+                      <FileJson className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                      <Badge className="text-xs bg-amber-500 text-amber-950 dark:text-amber-50">Test Cycle</Badge>
                     </div>
-                    <CardTitle className="text-lg">
-                      Test Cycle {groupedPendingScans.length - groupIndex}
-                    </CardTitle>
-                    <CardDescription className="flex items-center gap-1.5 text-xs">
-                      <Clock className="h-3 w-3" />
-                      {testDate}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
+                    <div>
+                      <h3 className="text-base font-semibold">Test Cycle {groupedPendingScans.length - groupIndex}</h3>
+                      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        {testDate}
+                      </p>
+                    </div>
                     <div className="space-y-2">
                       {group.map((scan: any) => (
                         <Button
                           key={scan.id}
                           size="sm"
                           variant="outline"
-                          className="w-full justify-between hover:bg-amber-100 dark:hover:bg-amber-500/20 dark:hover:text-amber-100 dark:hover:border-amber-500/40"
+                          className="w-full justify-between hover:bg-amber-50 dark:hover:bg-amber-900/30"
                           onClick={() => navigate(`/scan/${scan.id}`)}
                         >
                           <span className="text-xs truncate">{scan.url}</span>
@@ -193,27 +207,25 @@ export default function UploadNew() {
                         </Button>
                       ))}
                     </div>
-                    
-                    <div className="pt-1">
-                      <p className="text-xs text-center text-muted-foreground">
-                        {group.length} report{group.length !== 1 ? 's' : ''} in this cycle
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
-        </div>
-      )}
+                    <p className="text-xs text-center text-muted-foreground">
+                      {group.length} report{group.length !== 1 ? 's' : ''} in this cycle
+                    </p>
+                  </MotionCard>
+                )
+              })}
+            </div>
+          </MotionCard>
+        )}
 
-      <div>
-        <Card className="border-2">
-          <CardHeader>
-            <CardTitle>Upload Scan File</CardTitle>
-            <CardDescription>Supports JSON format from axe-core or Pa11y</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
+        <MotionCard className="p-6 space-y-6 rounded-xl border border-border bg-card shadow-sm hover:shadow-md">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-lg font-semibold tracking-tight">Upload Scan File</CardTitle>
+              <CardDescription>Supports JSON format from axe-core or Pa11y</CardDescription>
+            </div>
+            <Badge variant="framework" className="capitalize">{framework}</Badge>
+          </div>
+          <CardContent className="p-0 space-y-6">
             <div
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f && f.type === 'application/json') onFile(f) }}
@@ -239,120 +251,100 @@ export default function UploadNew() {
               <input ref={fileInputRef} type="file" accept=".json" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} className="hidden" aria-label="Upload JSON scan file" />
             </div>
 
-            <div className="space-y-2">
-              <label htmlFor="framework-upload-select" className="text-sm">Framework</label>
-              <Select value={framework} onValueChange={setFramework}>
-                <SelectTrigger id="framework-upload-select"><SelectValue placeholder="html" /></SelectTrigger>
-                <SelectContent>
-                  {['html','react','vue','angular','svelte'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-3">
-              <label htmlFor="project-select" className="text-sm font-medium">Project</label>
-              <div className="space-y-3">
-                <Select value={projectName} onValueChange={(val) => {
-                  setProjectName(val)
-                  setCustomProjectName('') // Clear custom input when selecting existing project
-                }}>
-                  <SelectTrigger id="project-select">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Framework</label>
+                <Select value={framework} onValueChange={setFramework}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select framework" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="html">HTML</SelectItem>
+                    <SelectItem value="react">React</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Project</label>
+                <Select value={projectName} onValueChange={setProjectName}>
+                  <SelectTrigger>
                     <SelectValue placeholder="Select project" />
                   </SelectTrigger>
                   <SelectContent>
                     {projects?.map((project) => (
-                      <SelectItem key={project} value={project}>
-                        {project}
-                      </SelectItem>
+                      <SelectItem key={project} value={project}>{project}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">or create new</span>
-                  </div>
-                </div>
-                
-                <div className="space-y-1.5">
-                  <Input
-                    id="custom-project-input"
-                    type="text"
-                    placeholder="Enter new project name and press Enter"
-                    value={customProjectName}
-                    onChange={(e) => setCustomProjectName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && customProjectName.trim()) {
-                        e.preventDefault()
-                        createProject.mutate(customProjectName.trim())
-                      }
-                    }}
-                    className={customProjectName.trim() ? 'border-primary ring-1 ring-primary/20' : ''}
-                    disabled={createProject.isPending}
-                  />
-                  {customProjectName.trim() && !createProject.isPending && (
-                    <p className="text-xs text-primary flex items-center gap-1">
-                      <CheckCircle2 className="h-3 w-3" />
-                      Press Enter to create: <strong>"{customProjectName.trim()}"</strong>
-                    </p>
-                  )}
-                  {createProject.isPending && (
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      Creating project...
-                    </p>
-                  )}
-                </div>
+                <Input
+                  placeholder="Or create a new project"
+                  value={customProjectName}
+                  onChange={(e) => setCustomProjectName(e.target.value)}
+                  aria-label="Custom project name"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => customProjectName.trim() && createProject.mutate(customProjectName.trim())}
+                  disabled={createProject.isPending || !customProjectName.trim()}
+                >
+                  {createProject.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Add Project
+                </Button>
               </div>
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="json-text-input" className="text-sm">Or paste JSON</label>
-              <Textarea 
-                id="json-text-input"
-                className="font-mono text-xs h-32" 
-                value={jsonText} 
-                onChange={(e) => setJsonText(e.target.value)} 
-                placeholder={`{ "violations": [...] }`}
+              <label className="text-sm font-medium text-foreground">Paste JSON (optional)</label>
+              <Textarea
+                value={jsonText}
+                onChange={(e) => setJsonText(e.target.value)}
+                placeholder="Paste your JSON report here"
+                className="min-h-[160px]"
               />
+              <div className="text-xs text-muted-foreground">If both file and text are provided, the file takes precedence.</div>
             </div>
 
-            <Button className="w-full bg-primary hover:bg-primary/90" size="lg" disabled={analyze.isPending} onClick={() => analyze.mutate()}>
-              {analyze.isPending ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Analyzing...</>) : (<><Sparkles className="mr-2 h-4 w-4" />Analyze with AI</>)}
-            </Button>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                className="gap-2 min-w-[180px] bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground,var(--primary-foreground)))] hover:bg-[hsl(var(--accent-dark,var(--accent)))] focus-visible:ring-[hsl(var(--accent))] focus-visible:ring-offset-2"
+                onClick={() => {
+                  setLatestScanId(null)
+                  analyze.mutate()
+                }}
+                disabled={analyze.isPending}
+              >
+                {analyze.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                Analyze Report
+              </Button>
+              {latestScanId && (
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => navigate(`/scan/${latestScanId}`)}
+                >
+                  View Results
+                </Button>
+              )}
+              {analyze.isSuccess && (
+                <Badge variant="neutral" className="gap-1">
+                  <CheckCircle2 className="h-3 w-3 text-green-600" />
+                  Uploaded
+                </Badge>
+              )}
+            </div>
+
+            {analyze.isPending && (
+              <div className="space-y-2">
+                <Progress value={60} aria-label="Analyzing report" />
+                <p className="text-sm text-muted-foreground">Analyzing... This may take a moment.</p>
+              </div>
+            )}
           </CardContent>
-        </Card>
+        </MotionCard>
       </div>
-
-      {analyze.isPending && (
-        <div>
-          <Card className="border-2">
-            <CardHeader><CardTitle>Analysis Progress</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <Progress value={60} className="h-2" />
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {analyze.data && (
-        <div>
-          <Card className="border-2"><CardHeader><CardTitle>Summary</CardTitle></CardHeader><CardContent><pre className="text-xs overflow-auto max-h-80">{JSON.stringify(analyze.data.summary, null, 2)}</pre></CardContent></Card>
-        </div>
-      )}
-      {analyze.data?.scan_id !== undefined && (
-        <div className="flex gap-3">
-          <Button asChild>
-            <a href={`/scan/${analyze.data.scan_id}`}>Open Summary</a>
-          </Button>
-          <Button variant="outline" asChild>
-            <a href={`/scan/${analyze.data.scan_id}/issues`}>Open Issues</a>
-          </Button>
-        </div>
-      )}
-    </div>
+    </main>
   )
 }

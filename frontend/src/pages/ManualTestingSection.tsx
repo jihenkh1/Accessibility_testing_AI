@@ -62,8 +62,8 @@ interface TestingMethodCardProps {
 
 function TestingMethodCard({ tool, name, description, icon, stats, onStart }: TestingMethodCardProps) {
   return (
-    <Card className="hover:shadow-lg transition-shadow">
-      <CardHeader>
+    <Card className="hover:shadow-lg transition-shadow h-full flex flex-col">
+      <CardHeader className="pb-3 min-h-[110px]">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-primary/10 rounded-lg">
@@ -71,27 +71,25 @@ function TestingMethodCard({ tool, name, description, icon, stats, onStart }: Te
             </div>
             <div>
               <CardTitle className="text-lg">{name}</CardTitle>
-              <CardDescription className="text-sm mt-1">{description}</CardDescription>
+              <CardDescription className="text-sm mt-1 line-clamp-2 min-h-[38px]">{description}</CardDescription>
             </div>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {stats && (
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <Bug className="w-4 h-4" />
-              <span>{stats.bug_count} {stats.bug_count === 1 ? 'bug' : 'bugs'}</span>
-            </div>
-            {stats.last_tested && (
-              <div className="flex items-center gap-1">
-                <Calendar className="w-4 h-4" />
-                <span>Last tested: {new Date(stats.last_tested).toLocaleDateString()}</span>
-              </div>
-            )}
+      <CardContent className="flex-1 flex flex-col justify-between gap-4">
+        <div className="flex items-center justify-between text-sm text-muted-foreground min-h-[48px] flex-wrap gap-2">
+          <div className="flex items-center gap-1">
+            <Bug className="w-4 h-4" />
+            <span>{stats?.bug_count ?? 0} {(stats?.bug_count ?? 0) === 1 ? 'bug' : 'bugs'}</span>
           </div>
-        )}
-        <Button onClick={onStart} className="w-full">
+          {stats?.last_tested ? (
+            <div className="flex items-center gap-1">
+              <Calendar className="w-4 h-4" />
+              <span>Last tested: {new Date(stats.last_tested).toLocaleDateString()}</span>
+            </div>
+          ) : null}
+        </div>
+        <Button onClick={onStart} className="w-full mt-auto">
           <FileText className="w-4 h-4 mr-2" />
           Start Testing
         </Button>
@@ -174,6 +172,7 @@ export default function ManualTestingDashboard() {
     queryFn: () => api.fetchAutomatedContext(selectedProject === 'All Projects' ? undefined : selectedProject),
     refetchOnMount: 'always'
   });
+  const hasValidAutomatedSummary = automatedContext?.has_automated_results && (automatedContext.total_violations ?? -1) >= 0;
 
   const { data: checklist } = useQuery({
     queryKey: ['checklist', selectedTool],
@@ -325,6 +324,10 @@ export default function ManualTestingDashboard() {
   // Keyboard shortcuts handler
   const handleKeyDown = (e: React.KeyboardEvent, items: any[]) => {
     if (!items || items.length === 0) return;
+    const target = e.target as HTMLElement;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+      return;
+    }
 
     switch (e.key.toLowerCase()) {
       case 'j':
@@ -395,7 +398,7 @@ export default function ManualTestingDashboard() {
       </div>
 
       {/* Automated Context Integration */}
-      {automatedContext?.has_automated_results && (
+      {hasValidAutomatedSummary && (
         <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">

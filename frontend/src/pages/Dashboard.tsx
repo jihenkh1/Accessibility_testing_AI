@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { listScanIssues, listScans, deleteScan, getFixMetrics, listProjects, cleanupDummyScans, deleteProject } from '../lib/api'
 import { Link, useNavigate } from 'react-router-dom'
@@ -12,10 +13,20 @@ import { Skeleton } from '../components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../components/ui/alert-dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip'
-import { AlertCircle, AlertTriangle, Clock, Sparkles, FileSpreadsheet, FileJson, Search, Upload, Trash2, FileJson2 } from 'lucide-react'
+import { AlertCircle, Clock, Sparkles, FileSpreadsheet, FileJson, Search, Upload, Trash2, FileJson2, MoreVertical, BellRing, Zap, BarChart } from 'lucide-react'
 import { EmptyState } from '../components/EmptyState'
 import { toast } from 'sonner'
 import { formatRelativeTime, formatAbsoluteTime } from '../utils/time'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu'
+import MotionCard from '../components/MotionCard'
+import { EmptyHero } from '../components/EmptyHero'
 
 export default function DashboardNew() {
   const navigate = useNavigate()
@@ -459,13 +470,27 @@ export default function DashboardNew() {
   // Count only unique analyzed scans (exclude framework-specific duplicates and documentation)
   const totalScans = analyzedScans?.length || 0
   const avgFixRate = fixMetrics?.fix_rate || 0
-  const openCriticals = analyzedScans?.reduce((sum: number, scan: any) => sum + (scan.critical_issues || 0), 0) || 0
+  const hasScans = totalScans > 0
+  const prefersReducedMotion = useReducedMotion()
+  const containerVariants = {
+    hidden: { opacity: 0, y: prefersReducedMotion ? 0 : 8 },
+    show: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        staggerChildren: prefersReducedMotion ? 0 : 0.06,
+        ease: 'easeOut',
+      },
+    },
+  }
+  const itemVariants = {
+    hidden: { opacity: 0, y: prefersReducedMotion ? 0 : 8 },
+    show: { opacity: 1, y: 0 },
+  }
 
   return (
     <TooltipProvider>
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Sticky Summary Header */}
-      <div />
+    <main className="relative max-w-6xl mx-auto px-6 py-10 space-y-10">
       
       {isLoading && (
         <div className="space-y-6">
@@ -481,11 +506,13 @@ export default function DashboardNew() {
           {/* Metric Cards Skeleton */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[1, 2, 3].map((i) => (
-              <Card key={i} className="border-2">
-                <CardContent className="p-6">
+              <Card key={i} className="shadow-sm">
+                <CardHeader>
+                  <Skeleton className="h-4 w-24" />
+                </CardHeader>
+                <CardContent className="pt-0">
                   <div className="flex items-start justify-between">
                     <div className="space-y-3 flex-1">
-                      <Skeleton className="h-4 w-24" />
                       <Skeleton className="h-12 w-20" />
                       <Skeleton className="h-3 w-32" />
                     </div>
@@ -497,7 +524,7 @@ export default function DashboardNew() {
           </div>
 
           {/* Large Card Skeleton */}
-          <Card className="border-2">
+          <Card className="shadow-sm">
             <CardHeader>
               <Skeleton className="h-6 w-48" />
               <Skeleton className="h-4 w-96 mt-2" />
@@ -518,8 +545,11 @@ export default function DashboardNew() {
       )}
       
       {error && (
-        <Card className="border-2 border-destructive/50">
-          <CardContent className="py-8">
+        <Card className="border-destructive/50 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold text-destructive">Dashboard Error</CardTitle>
+          </CardHeader>
+          <CardContent className="py-6">
             <EmptyState
               icon={AlertCircle}
               title="Failed to load dashboard"
@@ -535,588 +565,661 @@ export default function DashboardNew() {
       )}
 
       {!isLoading && !error && (
-        <>
-          <section className="space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Project</p>
-                <h1 className="text-3xl font-semibold">{selectedProject}</h1>
-                <p className="text-sm text-muted-foreground">
-                  {totalScans} {totalScans === 1 ? 'test run' : 'test runs'}
-                  {latest ? ` • Last analyzed ${lastRunRelative}` : ' • Awaiting first scan'}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                {projects && projects.length > 0 && (
-                  <Select value={selectedProject} onValueChange={setSelectedProject}>
-                    <SelectTrigger className="w-[220px]">
-                      <SelectValue placeholder="Select project" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {projects.map((project) => (
-                        <SelectItem key={project} value={project}>
-                          {project}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-                {selectedProject !== 'Default Project' && (
-                  <Button variant="destructive" size="sm" onClick={() => setDeleteProjectDialogOpen(true)}>
-                    Delete Project
-                  </Button>
-                )}
-              </div>
-            </div>
+        <div className="relative rounded-3xl bg-muted/40 p-8 space-y-8 overflow-hidden">
+          <div className="pointer-events-none absolute inset-0 opacity-[0.04] bg-[radial-gradient(circle_at_top,rgba(0,0,0,0.25),transparent)]" aria-hidden />
 
-            <Card className="border-2 overflow-hidden">
-              <CardHeader className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          {hasScans ? (
+            <div className="space-y-8">
+              <section className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between relative">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">{selectedProject}</h1>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {totalScans} {totalScans === 1 ? 'test run' : 'test runs'} · {latest ? `Last analyzed ${lastRunRelative}` : 'Awaiting first scan'}
+                  </p>
+                  {lastRunAbsolute && (
+                    <p className="text-sm text-muted-foreground">Recorded at {lastRunAbsolute}</p>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 justify-end">
+                  {projects && projects.length > 0 && (
+                    <Select value={selectedProject} onValueChange={setSelectedProject}>
+                      <SelectTrigger className="w-[220px] h-9 focus-visible:ring-[hsl(var(--accent))] focus-visible:ring-offset-2">
+                        <SelectValue placeholder="Select project" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {projects.map((project) => (
+                          <SelectItem key={project} value={project}>
+                            {project}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 rounded-full border border-border bg-card shadow-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                        aria-label="Project actions"
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48 rounded-xl border border-border bg-popover shadow-lg">
+                      <DropdownMenuLabel>Project Actions</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => navigate('/settings')}>
+                        Settings
+                      </DropdownMenuItem>
+                      {selectedProject !== 'Default Project' && (
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => setDeleteProjectDialogOpen(true)}
+                          aria-label="Delete project"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete Project
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button
+                    className="gap-2 min-w-[160px] bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground, var(--primary-foreground)))] hover:bg-[hsl(var(--accent-dark,var(--accent)))] focus-visible:ring-[hsl(var(--accent))] focus-visible:ring-offset-2"
+                    onClick={() => navigate('/manual-testing')}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Start Manual Testing
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="gap-2 min-w-[150px] border-[hsl(var(--accent))]/70 text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent))]/10 focus-visible:ring-[hsl(var(--accent))] focus-visible:ring-offset-2"
+                    onClick={() => navigate('/upload')}
+                  >
+                    <Upload className="h-4 w-4" />
+                    Upload New Scan
+                  </Button>
+                </div>
+              </section>
+
+              <motion.div
+                variants={containerVariants}
+                initial="hidden"
+                animate="show"
+                className="space-y-8"
+              >
+                <section className="grid gap-6 md:grid-cols-2">
+            <MotionCard variants={itemVariants} className="p-6 space-y-4 rounded-2xl border border-border bg-card/95 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <CardTitle>Action Center</CardTitle>
-                  <CardDescription>Keep testers and developers focused on the next move.</CardDescription>
+                  <h2 className="text-lg font-semibold tracking-tight flex items-center gap-2">
+                    <BarChart className="h-4 w-4 text-primary" />
+                    Action Center
+                  </h2>
+                  <p className="text-sm text-muted-foreground">Keep testers and developers focused on the next move.</p>
                 </div>
                 {latest && (
-                  <Badge variant="secondary" className="capitalize">
+                  <Badge variant="framework" className="capitalize">
                     {latest.framework}
                   </Badge>
                 )}
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-6 lg:grid-cols-3">
-                  <div className="lg:col-span-2 space-y-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">
-                        {lastRunRelative ? `Last scan ${lastRunRelative}` : 'No scans analyzed yet'}
-                      </p>
-                      {lastRunAbsolute && (
-                        <p className="text-xs text-muted-foreground">{lastRunAbsolute}</p>
-                      )}
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <div className="rounded-2xl border bg-card/80 p-4">
-                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                          Total Scans
-                        </p>
-                        <p className="mt-1 text-3xl font-semibold">{totalScans}</p>
-                      </div>
-                      <div className="rounded-2xl border bg-card/80 p-4">
-                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                          Avg Fix Rate
-                        </p>
-                        <p className="mt-1 text-3xl font-semibold">{avgFixRateDisplay}</p>
-                      </div>
-                      <div className="rounded-2xl border bg-card/80 p-4">
-                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                          Critical Open
-                        </p>
-                        <p className="mt-1 text-3xl font-semibold text-destructive">
-                          {criticalBlockers.length}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <Button className="w-full" onClick={() => navigate('/manual-testing')}>
-                      <Sparkles className="mr-2 h-4 w-4" />
-                      Start Manual Testing
-                    </Button>
-                    <Button variant="outline" className="w-full" onClick={() => navigate('/upload')}>
-                      <Upload className="mr-2 h-4 w-4" />
-                      Upload New Scan
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="w-full"
-                      onClick={() => latest && navigate(`/scan/${latest.id}/issues`)}
-                      disabled={!latest}
-                    >
-                      View Latest Issues
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </section>
-
-          {criticalPreview.length > 0 && (
-            <Card className="border-2 border-destructive/30 bg-destructive/5">
-              <CardHeader className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              </div>
+              <div className="space-y-4">
                 <div>
-                  <CardTitle className="flex items-center gap-2 text-destructive">
-                    <AlertTriangle className="h-4 w-4" />
-                    Action Required
-                  </CardTitle>
-                  <CardDescription>
-                    {criticalBlockers.length} critical {criticalBlockers.length === 1 ? 'issue' : 'issues'} blocking accessibility
-                  </CardDescription>
+                  <p className="text-sm text-muted-foreground">
+                    {lastRunRelative ? `Last scan ${lastRunRelative}` : 'No scans analyzed yet'}
+                  </p>
+                  {lastRunAbsolute && (
+                    <p className="text-sm text-muted-foreground">{lastRunAbsolute}</p>
+                  )}
                 </div>
-                {extraCriticalCount > 0 && (
-                  <Badge variant="outline">+{extraCriticalCount} more</Badge>
-                )}
-              </CardHeader>
-              <CardContent className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border bg-card/80 p-4">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Total Scans
+                    </p>
+                    <p className="mt-1 text-3xl font-semibold">{totalScans}</p>
+                  </div>
+                  <div className="rounded-2xl border bg-card/80 p-4">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Avg Fix Rate
+                    </p>
+                    <p className="mt-1 text-3xl font-semibold">{avgFixRateDisplay}</p>
+                  </div>
+                  <div className="rounded-2xl border bg-card/80 p-4">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Critical Open
+                    </p>
+                    <p className="mt-1 text-3xl font-semibold text-destructive">
+                      {criticalBlockers.length}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    variant="ghost"
+                    className="text-primary gap-2"
+                    onClick={() => latest && navigate(`/scan/${latest.id}/issues`)}
+                    disabled={!latest}
+                  >
+                    View Latest Issues
+                  </Button>
+                  {accessibilityScore && (
+                    <Badge variant="neutral" className="flex items-center gap-2">
+                      Score {accessibilityScore.score} · Grade {accessibilityScore.grade}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </MotionCard>
+
+            {criticalPreview.length > 0 ? (
+              <MotionCard variants={itemVariants} className="p-6 space-y-3 rounded-2xl border border-destructive/60 bg-[hsl(var(--destructive-soft))] shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h2 className="text-lg font-semibold tracking-tight flex items-center gap-2 text-destructive">
+                      <BellRing className="h-4 w-4" />
+                      Action Required
+                    </h2>
+                    <p className="text-sm text-foreground">
+                      {criticalBlockers.length} critical {criticalBlockers.length === 1 ? 'issue' : 'issues'} blocking accessibility
+                    </p>
+                  </div>
+                  {extraCriticalCount > 0 && (
+                    <Badge variant="outline">+{extraCriticalCount} more</Badge>
+                  )}
+                </div>
                 {criticalPreview.map((issue) => (
                   <div
                     key={issue.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background/80 p-4"
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/20 bg-card p-4"
                   >
                     <div>
                       <p className="text-sm font-semibold">{issue.rule}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm text-foreground/80 dark:text-foreground/90">
                         {issue.selector || 'Unknown location'}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="border-destructive text-destructive">
-                        ~{issue.effort} min
-                      </Badge>
+                      <Badge variant="effort">~{issue.effort} min</Badge>
                       <Button
-                        variant="outline"
+                        variant="destructive"
                         size="sm"
                         onClick={() => latest && navigate(`/scan/${latest.id}/issues?severity=critical`)}
+                        className="gap-2"
                       >
                         Fix Now
                       </Button>
                     </div>
                   </div>
                 ))}
-              </CardContent>
-            </Card>
-          )}
+              </MotionCard>
+            ) : (
+              <MotionCard variants={itemVariants} className="p-6 space-y-3 rounded-2xl border border-border bg-card/95 shadow-sm hover:shadow-md transition-shadow">
+                <h2 className="text-lg font-semibold tracking-tight flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  No Critical Blockers
+                </h2>
+                <p className="text-sm text-foreground">
+                  You're clear of critical issues for now. Prioritize high and medium severity items in the tables below.
+                </p>
+              </MotionCard>
+            )}
+          </section>
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card className="border-2">
-              <CardHeader>
-                <CardTitle>Latest Scan Overview</CardTitle>
-                <CardDescription>Snapshot of the most recent analysis</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {latest ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-xl border bg-muted/20 p-3">
-                      <p className="text-xs text-muted-foreground">Total issues</p>
-                      <p className="text-3xl font-semibold">{total}</p>
+          <section className="grid gap-6 md:grid-cols-2">
+            <MotionCard variants={itemVariants} className="p-6 space-y-4 rounded-2xl border border-border bg-card/95 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold tracking-tight text-foreground">Latest Scan Overview</h2>
+                  <p className="text-sm text-muted-foreground">Snapshot of the most recent analysis</p>
+                </div>
+                <Badge variant="framework" className="capitalize">
+                  {latest?.framework || '—'}
+                </Badge>
+              </div>
+              {latest ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border bg-muted/20 p-3">
+                    <p className="text-sm text-foreground/80">Total issues</p>
+                    <p className="text-3xl font-semibold">{total}</p>
+                  </div>
+                  <div className="rounded-xl border bg-muted/20 p-3">
+                    <p className="text-sm text-foreground/80">Critical</p>
+                    <p className="text-3xl font-semibold text-destructive">{critical}</p>
+                  </div>
+                  <div className="rounded-xl border bg-muted/20 p-3">
+                    <p className="text-sm text-foreground/80">Effort</p>
+                    <p className="text-3xl font-semibold">
+                      {effortFormatted.display}
+                      {effortFormatted.unit}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border bg-muted/20 p-3">
+                    <p className="text-sm text-foreground/80">Framework</p>
+                    <p className="text-xl font-semibold capitalize">{latest.framework}</p>
+                  </div>
+                </div>
+              ) : (
+                <EmptyState
+                  icon={AlertCircle}
+                  title="No scan data available"
+                  description="Upload a scan report to see the latest accessibility test results."
+                />
+              )}
+            </MotionCard>
+
+                {quickWins.length > 0 ? (
+              <MotionCard variants={itemVariants} className="p-6 space-y-3 rounded-2xl border border-[hsl(var(--success))]/60 bg-[hsl(var(--success-soft))] shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold tracking-tight flex items-center gap-2">
+                      <Zap className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      Quick Wins
+                    </h2>
+                    <p className="text-sm text-foreground/80">High priority, low effort fixes</p>
+                  </div>
+                  <Badge variant="neutral">{quickWins.length} items</Badge>
+                </div>
+                {quickWins.slice(0, 3).map((win) => (
+                  <div key={win.id} className="rounded-lg border bg-card p-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">{win.rule}</p>
+                      <p className="text-sm text-foreground/80 line-clamp-2">
+                        {win.description || 'AI generated fix suggestion'}
+                      </p>
                     </div>
-                    <div className="rounded-xl border bg-muted/20 p-3">
-                      <p className="text-xs text-muted-foreground">Critical</p>
-                      <p className="text-3xl font-semibold text-destructive">{critical}</p>
+                    <Badge variant="effort">{win.effort} min</Badge>
+                  </div>
+                ))}
+                {quickWins.length > 3 && (
+                  <Button variant="outline" size="sm" className="w-full gap-2" onClick={() => navigate(`/scan/${latest?.id}/issues`)}>
+                    View all quick wins →
+                  </Button>
+                )}
+              </MotionCard>
+            ) : (
+              <MotionCard variants={itemVariants} className="p-6 space-y-3 rounded-2xl border border-border bg-card/95 shadow-sm hover:shadow-md transition-shadow">
+                <h2 className="text-lg font-semibold tracking-tight flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-primary" />
+                  Quick Wins
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  No quick wins detected yet. Run another scan or review the issues table for potential low-effort fixes.
+                </p>
+              </MotionCard>
+            )}
+          </section>
+
+          {latest && latestIssues && (
+            <MotionCard variants={itemVariants} className="p-6 space-y-4 rounded-2xl border border-border bg-muted/40 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold tracking-tight">Summary & Issues Table</h2>
+                  <p className="text-sm text-muted-foreground">Switch between executive summary and a detailed table.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-2">
+                    <Search className="h-4 w-4 text-muted-foreground" />
+                    <Input
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search rule or selector"
+                      className="h-9 w-[240px]"
+                    />
+                  </div>
+                  <Select value={severityFilter} onValueChange={setSeverityFilter}>
+                    <SelectTrigger className="h-9 w-[140px]">
+                      <SelectValue placeholder="Severity" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All severities</SelectItem>
+                      <SelectItem value="critical">Critical</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="low">Low</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+                <Tabs defaultValue="summary">
+                  <TabsList className="w-full sm:w-auto">
+                    <TabsTrigger value="summary" className="flex-1 sm:flex-none data-[state=active]:text-[hsl(var(--accent))] data-[state=active]:border-b-2 data-[state=active]:border-[hsl(var(--accent))] rounded-none">Summary</TabsTrigger>
+                    <TabsTrigger value="issues" className="flex-1 sm:flex-none data-[state=active]:text-[hsl(var(--accent))] data-[state=active]:border-b-2 data-[state=active]:border-[hsl(var(--accent))] rounded-none">Issues Table</TabsTrigger>
+                  </TabsList>
+                <TabsContent value="summary" className="space-y-4 pt-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-xl border p-4">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">AI enhanced issues</p>
+                      <p className="text-3xl font-semibold">{latest.ai_enhanced_issues || 0}</p>
                     </div>
-                    <div className="rounded-xl border bg-muted/20 p-3">
-                      <p className="text-xs text-muted-foreground">Effort</p>
+                    <div className="rounded-xl border p-4">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Estimated effort</p>
                       <p className="text-3xl font-semibold">
                         {effortFormatted.display}
                         {effortFormatted.unit}
                       </p>
                     </div>
-                    <div className="rounded-xl border bg-muted/20 p-3">
-                      <p className="text-xs text-muted-foreground">Framework</p>
-                      <p className="text-xl font-semibold capitalize">{latest.framework}</p>
-                    </div>
                   </div>
-                ) : (
-                  <EmptyState
-                    icon={AlertCircle}
-                    title="No scan data available"
-                    description="Upload a scan report to see the latest accessibility test results."
-                  />
-                )}
-              </CardContent>
-            </Card>
-
-            {quickWins.length > 0 && (
-              <Card className="border-2 border-green-500/30 bg-green-50/80 dark:bg-green-950/20">
-                <CardHeader>
-                  <CardTitle>Quick Wins</CardTitle>
-                  <CardDescription>High priority, low effort fixes</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {quickWins.slice(0, 3).map((win) => (
-                    <div key={win.id} className="rounded-lg border bg-background p-3 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold">{win.rule}</p>
-                        <p className="text-xs text-muted-foreground line-clamp-2">
-                          {win.description || 'AI generated fix suggestion'}
-                        </p>
-                      </div>
-                      <Badge variant="outline" className="border-green-600 text-green-600">
-                        {win.effort} min
-                      </Badge>
-                    </div>
-                  ))}
-                  {quickWins.length > 3 && (
-                    <Button variant="outline" size="sm" className="w-full" onClick={() => navigate(`/scan/${latest?.id}/issues`)}>
-                      View all quick wins →
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-          </div>
-
-          {latest && latestIssues && (
-            <Card className="border-2">
-              <CardHeader>
-                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <CardTitle>Summary & Issues Table</CardTitle>
-                    <CardDescription>Switch between executive summary and a detailed table.</CardDescription>
+                  <div className="rounded-xl border p-4 bg-muted/40">
+                    <p className="text-sm font-semibold mb-1">AI Guidance</p>
+                    <p className="text-sm text-muted-foreground">
+                      Use the quick wins above to clear the fastest fixes, then hand off any complex issues with the table below.
+                    </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex items-center gap-2">
-                      <Search className="h-4 w-4 text-muted-foreground" />
-                      <Input
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search rule or selector"
-                        className="h-9 w-[240px]"
-                      />
+                </TabsContent>
+                <TabsContent value="issues" className="pt-4">
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Select value={sortBy} onValueChange={(value: typeof sortBy) => setSortBy(value)}>
+                        <SelectTrigger className="h-9 w-[180px]">
+                          <SelectValue placeholder="Sort by" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="severity">Sort by Severity</SelectItem>
+                          <SelectItem value="instances">Sort by Instances</SelectItem>
+                          <SelectItem value="effort">Sort by Effort</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button variant="ghost" size="sm" className="gap-2" onClick={() => downloadCSV(sorted)}>
+                        <FileSpreadsheet className="h-4 w-4" />
+                        Export CSV
+                      </Button>
+                      <Button variant="ghost" size="sm" className="gap-2" onClick={() => downloadJSON(sorted)}>
+                        <FileJson className="h-4 w-4" />
+                        Export JSON
+                      </Button>
                     </div>
-                    <Select value={severityFilter} onValueChange={setSeverityFilter}>
-                      <SelectTrigger className="h-9 w-[140px]">
-                        <SelectValue placeholder="Severity" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All severities</SelectItem>
-                        <SelectItem value="critical">Critical</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="low">Low</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Tabs defaultValue="summary">
-                  <TabsList className="w-full sm:w-auto">
-                    <TabsTrigger value="summary" className="flex-1 sm:flex-none">Summary</TabsTrigger>
-                    <TabsTrigger value="issues" className="flex-1 sm:flex-none">Issues Table</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="summary" className="space-y-4 pt-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="rounded-xl border p-4">
-                        <p className="text-xs text-muted-foreground">AI enhanced issues</p>
-                        <p className="text-3xl font-semibold">{latest.ai_enhanced_issues || 0}</p>
-                      </div>
-                      <div className="rounded-xl border p-4">
-                        <p className="text-xs text-muted-foreground">Estimated effort</p>
-                        <p className="text-3xl font-semibold">
-                          {effortFormatted.display}
-                          {effortFormatted.unit}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="rounded-xl border p-4 bg-muted/40">
-                      <p className="text-sm font-semibold mb-1">AI Guidance</p>
-                      <p className="text-sm text-muted-foreground">
-                        Use the quick wins above to clear the fastest fixes, then hand off any complex issues with the table below.
-                      </p>
-                    </div>
-                  </TabsContent>
-                  <TabsContent value="issues" className="pt-4">
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Select value={sortBy} onValueChange={(value: typeof sortBy) => setSortBy(value)}>
-                          <SelectTrigger className="h-9 w-[180px]">
-                            <SelectValue placeholder="Sort by" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="severity">Sort by Severity</SelectItem>
-                            <SelectItem value="instances">Sort by Instances</SelectItem>
-                            <SelectItem value="effort">Sort by Effort</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Button variant="ghost" size="sm" onClick={() => downloadCSV(sorted)}>
-                          <FileSpreadsheet className="mr-2 h-4 w-4" />
-                          Export CSV
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => downloadJSON(sorted)}>
-                          <FileJson className="mr-2 h-4 w-4" />
-                          Export JSON
-                        </Button>
-                      </div>
-                      <div className="rounded-lg border">
-                        <Table>
-                          <TableHeader>
+                    <div className="rounded-lg border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Rule</TableHead>
+                            <TableHead>Element</TableHead>
+                            <TableHead>Severity</TableHead>
+                            <TableHead>WCAG</TableHead>
+                            <TableHead>AI Fix Suggestion</TableHead>
+                            <TableHead className="text-right">Instances</TableHead>
+                            <TableHead className="text-right">Effort</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {sorted.length === 0 ? (
                             <TableRow>
-                              <TableHead>Rule</TableHead>
-                              <TableHead>Element</TableHead>
-                              <TableHead>Severity</TableHead>
-                              <TableHead>WCAG</TableHead>
-                              <TableHead>AI Fix Suggestion</TableHead>
-                              <TableHead className="text-right">Instances</TableHead>
-                              <TableHead className="text-right">Effort</TableHead>
+                              <TableCell colSpan={7} className="text-center text-muted-foreground">
+                                No issues match your filters.
+                              </TableCell>
                             </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {sorted.length === 0 ? (
-                              <TableRow>
-                                <TableCell colSpan={7} className="text-center text-muted-foreground">
-                                  No issues match your filters.
+                          ) : (
+                            sorted.slice(0, 25).map((issue) => (
+                              <TableRow key={issue.id}>
+                                <TableCell className="font-medium">{issue.rule}</TableCell>
+                                <TableCell>
+                                  <code className="text-xs bg-muted px-1 rounded">
+                                    {issue.element || 'N/A'}
+                                  </code>
                                 </TableCell>
+                                <TableCell>
+                                  <Tooltip>
+                                    <TooltipTrigger>
+                                      <Badge
+                                        variant={
+                                          issue.severity === 'critical'
+                                            ? 'critical'
+                                            : issue.severity === 'high'
+                                            ? 'high'
+                                            : 'neutral'
+                                        }
+                                        className="capitalize"
+                                      >
+                                        {issue.severity}
+                                      </Badge>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>{getSeverityTooltip(issue.severity)}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TableCell>
+                                <TableCell>{issue.wcag || '—'}</TableCell>
+                                <TableCell>
+                                  <p className="max-w-[260px] text-sm text-muted-foreground line-clamp-2">
+                                    {issue.aiSuggestion || 'AI fix guidance not available'}
+                                  </p>
+                                </TableCell>
+                                <TableCell className="text-right">{issue.instances}</TableCell>
+                                <TableCell className="text-right text-muted-foreground">{issue.effort}</TableCell>
                               </TableRow>
-                            ) : (
-                              sorted.slice(0, 25).map((issue) => (
-                                <TableRow key={issue.id}>
-                                  <TableCell className="font-medium">{issue.rule}</TableCell>
-                                  <TableCell>
-                                    <code className="text-xs bg-muted px-1 rounded">
-                                      {issue.element || 'N/A'}
-                                    </code>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Tooltip>
-                                      <TooltipTrigger>
-                                        <Badge
-                                          variant={issue.severity === 'critical' ? 'destructive' : 'secondary'}
-                                          className="capitalize"
-                                        >
-                                          {issue.severity}
-                                        </Badge>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>{getSeverityTooltip(issue.severity)}</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TableCell>
-                                  <TableCell>{issue.wcag || '—'}</TableCell>
-                                  <TableCell>
-                                    <p className="max-w-[260px] text-sm text-muted-foreground line-clamp-2">
-                                      {issue.aiSuggestion || 'AI fix guidance not available'}
-                                    </p>
-                                  </TableCell>
-                                  <TableCell className="text-right">{issue.instances}</TableCell>
-                                  <TableCell className="text-right text-muted-foreground">{issue.effort}</TableCell>
-                                </TableRow>
-                              ))
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
                     </div>
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </MotionCard>
           )}
 
-          {/* Pending Test Cycles - Enhanced */}
           {groupedPendingScans.length > 0 && (
-            <Card className="border-2 border-amber-500/30 bg-gradient-to-br from-amber-50/50 to-orange-50/50 dark:from-amber-950/20 dark:to-orange-950/20">
-              <div className="border-b bg-background/50 backdrop-blur p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-amber-500/10 ring-4 ring-amber-500/5">
-                      <Clock className="h-5 w-5 text-amber-600 dark:text-amber-500" />
-                    </div>
-                    <div>
-                      <CardTitle>Pending Test Cycles</CardTitle>
-                      <CardDescription className="mt-1">
-                        {groupedPendingScans.reduce((acc, group) => acc + group.length, 0)} reports awaiting analysis
-                      </CardDescription>
-                    </div>
+            <MotionCard variants={itemVariants} className="p-6 space-y-4 rounded-2xl border border-border bg-card/95 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-muted">
+                    <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                   </div>
-                  <Badge className="bg-amber-500 hover:bg-amber-600">
-                    {groupedPendingScans.length} cycles
-                  </Badge>
-                </div>
-              </div>
-              <CardContent className="pt-6">
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {groupedPendingScans.map((group, groupIndex) => {
-                    const firstScan = group[0]
-                    const testDate = new Date(firstScan.ts)
-                    
-                    return (
-                      <Card 
-                        key={`cycle-${groupIndex}`} 
-                        className="group hover:shadow-xl hover:scale-[1.02] transition-all duration-300 border-2 border-amber-200/50 dark:border-amber-800/50 bg-background/80 backdrop-blur"
-                      >
-                        <CardHeader className="pb-3 space-y-3">
-                          <div className="flex items-start justify-between">
-                            <div className="p-2.5 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 group-hover:scale-110 transition-transform">
-                              <FileJson2 className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                            </div>
-                            <Badge variant="outline" className="font-mono text-xs border-amber-300 dark:border-amber-700">
-                              {group.length} reports
-                            </Badge>
-                          </div>
-                          <div>
-                            <CardTitle className="text-lg flex items-center gap-2">
-                              Test Cycle #{groupedPendingScans.length - groupIndex}
-                            </CardTitle>
-                            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {testDate.toLocaleDateString()} at {testDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </p>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                          {group.map((scan: any, index: number) => (
-                            <div key={scan.id} className="flex gap-2 items-center">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="flex-1 justify-between text-xs group/btn hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:border-amber-400 dark:hover:border-amber-600 transition-all min-w-0"
-                                onClick={() => navigate(`/scan/${scan.id}`)}
-                              >
-                                <span className="truncate flex items-center gap-2 min-w-0">
-                                  <span className="w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center text-[10px] font-bold">
-                                    {index + 1}
-                                  </span>
-                                  <span className="truncate">{scan.url.split('/').pop() || scan.url}</span>
-                                </span>
-                                <span className="ml-2 group-hover/btn:translate-x-1 transition-transform">→</span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 transition-colors"
-                                onClick={(e) => handleDeleteClick(scan.id, e)}
-                                disabled={deleteMutation.isPending}
-                                aria-label="Delete pending scan"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </CardContent>
-                      </Card>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Recent Analyzed Runs - Industry Standard Table */}
-          {analyzedScans && analyzedScans.length > 0 && (
-            <Card className="border-2">
-              <CardHeader>
-                <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>Recent Analyzed Runs</CardTitle>
-                    <CardDescription className="mt-1">
-                      {analyzedScans.length} scans with accessibility issues detected
-                    </CardDescription>
+                    <h2 className="text-lg font-semibold tracking-tight">Pending Test Cycles</h2>
+                    <p className="text-sm text-muted-foreground">
+                      {groupedPendingScans.reduce((acc, group) => acc + group.length, 0)} reports awaiting analysis
+                    </p>
                   </div>
-                  <Link to="/runs">
-                    <Button variant="outline" size="sm">
-                      View All →
-                    </Button>
-                  </Link>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[80px]">ID</TableHead>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Date & Time</TableHead>
-                        <TableHead>Framework</TableHead>
-                        <TableHead className="text-right">Issues</TableHead>
-                        <TableHead>Severity</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {analyzedScans.slice(0, 5).map((scan: any) => (
-                        <TableRow key={scan.id} className="group">
-                          <TableCell className="font-mono text-sm">
-                            <Badge variant="outline">#{scan.id}</Badge>
-                          </TableCell>
-                          <TableCell className="max-w-[250px]">
-                            <Link 
-                              to={`/scan/${scan.id}`}
-                              className="truncate hover:text-primary transition-colors font-medium text-sm block"
+                <Badge variant="outline">
+                  {groupedPendingScans.length} cycles
+                </Badge>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {groupedPendingScans.map((group, groupIndex) => {
+                  const firstScan = group[0]
+                  const testDate = new Date(firstScan.ts)
+                  
+                  return (
+                    <MotionCard 
+                      key={`cycle-${groupIndex}`} 
+                      variants={itemVariants}
+                      className="p-4 space-y-3 rounded-2xl border border-border bg-card/95 shadow-sm hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="p-2.5 rounded-xl bg-muted">
+                          <FileJson2 className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                        </div>
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {group.length} reports
+                        </Badge>
+                      </div>
+                      <div>
+                        <h3 className="text-base font-semibold flex items-center gap-2">
+                          Test Cycle #{groupedPendingScans.length - groupIndex}
+                        </h3>
+                        <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {testDate.toLocaleDateString()} at {testDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        {group.map((scan: any, index: number) => (
+                          <div key={scan.id} className="flex gap-2 items-center">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 justify-between text-xs hover:bg-muted transition-all min-w-0"
+                              onClick={() => navigate(`/scan/${scan.id}`)}
                             >
-                              {scan.url}
-                            </Link>
-                          </TableCell>
-                          <TableCell className="text-sm whitespace-nowrap">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="flex flex-col cursor-help">
-                                  <span className="font-medium">{formatRelativeTime(scan.ts)}</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {new Date(scan.ts).toLocaleDateString()}
-                                  </span>
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="font-mono text-xs">{formatAbsoluteTime(scan.ts)}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary" className="capitalize">
-                              {scan.framework}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span className="text-lg font-semibold">{scan.total_issues}</span>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1.5">
-                              {scan.critical_issues > 0 && (
-                                <Badge className="bg-red-700 hover:bg-red-800 text-white dark:bg-red-700 dark:hover:bg-red-800 dark:text-white font-mono text-xs px-1.5">
-                                  {scan.critical_issues}C
-                                </Badge>
-                              )}
-                              {scan.high_issues > 0 && (
-                                <Badge className="bg-orange-700 hover:bg-orange-800 text-white dark:bg-orange-700 dark:hover:bg-orange-800 dark:text-white font-mono text-xs px-1.5">
-                                  {scan.high_issues}H
-                                </Badge>
-                              )}
-                              {scan.medium_issues > 0 && (
-                                <Badge className="bg-amber-800 hover:bg-amber-900 text-white dark:bg-amber-700 dark:hover:bg-amber-800 dark:text-white font-mono text-xs px-1.5">
-                                  {scan.medium_issues}M
-                                </Badge>
-                              )}
-                              {scan.low_issues > 0 && (
-                                <Badge variant="secondary" className="font-mono text-xs px-1.5">
-                                  {scan.low_issues}L
-                                </Badge>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => navigate(`/scan/${scan.id}/issues`)}
-                                className="h-8"
-                              >
-                                View Issues
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleDeleteClick(scan.id, e)
-                                }}
-                                className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                aria-label="Delete scan"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+                              <span className="truncate flex items-center gap-2 min-w-0">
+                                <span className="w-5 h-5 rounded-full bg-muted text-foreground flex items-center justify-center text-[10px] font-bold">
+                                  {index + 1}
+                                </span>
+                                <span className="truncate">{scan.url.split('/').pop() || scan.url}</span>
+                              </span>
+                              <span className="ml-2 transition-transform">→</span>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 transition-colors"
+                              onClick={(e) => handleDeleteClick(scan.id, e)}
+                              disabled={deleteMutation.isPending}
+                              aria-label="Delete pending scan"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </MotionCard>
+                  )
+                })}
+              </div>
+            </MotionCard>
           )}
-        </>
-      )}
 
+          {analyzedScans && analyzedScans.length > 0 && (
+            <MotionCard variants={itemVariants} className="p-6 space-y-4 rounded-2xl border border-border bg-card/95 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold tracking-tight text-foreground">Recent Analyzed Runs</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {analyzedScans.length} scans with accessibility issues detected
+                  </p>
+                </div>
+                <Link to="/runs">
+                  <Button variant="outline" size="sm" className="gap-2">
+                    View All →
+                  </Button>
+                </Link>
+              </div>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[80px]">ID</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Date & Time</TableHead>
+                      <TableHead>Framework</TableHead>
+                      <TableHead className="text-right">Issues</TableHead>
+                      <TableHead>Severity</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {analyzedScans.slice(0, 5).map((scan: any) => (
+                      <TableRow key={scan.id} className="group">
+                        <TableCell className="font-mono text-sm">
+                          <Badge variant="outline">#{scan.id}</Badge>
+                        </TableCell>
+                        <TableCell className="max-w-[250px]">
+                          <Link 
+                            to={`/scan/${scan.id}`}
+                            className="truncate hover:text-primary transition-colors font-medium text-sm block"
+                          >
+                            {scan.url}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-sm whitespace-nowrap">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex flex-col cursor-help">
+                                <span className="font-medium">{formatRelativeTime(scan.ts)}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(scan.ts).toLocaleDateString()}
+                                </span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="font-mono text-xs">{formatAbsoluteTime(scan.ts)}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="framework" className="capitalize">
+                            {scan.framework}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span className="text-lg font-semibold">{scan.total_issues}</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1.5">
+                            {scan.critical_issues > 0 && (
+                              <Badge variant="critical">
+                                Critical {scan.critical_issues}
+                              </Badge>
+                            )}
+                            {scan.high_issues > 0 && (
+                              <Badge variant="high">
+                                High {scan.high_issues}
+                              </Badge>
+                            )}
+                            {scan.medium_issues > 0 && (
+                              <Badge variant="neutral">
+                                Medium {scan.medium_issues}
+                              </Badge>
+                            )}
+                            {scan.low_issues > 0 && (
+                              <Badge variant="neutral">
+                                Low {scan.low_issues}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => navigate(`/scan/${scan.id}/issues`)}
+                              className="h-8 gap-2"
+                            >
+                              View Issues
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteClick(scan.id, e)
+                              }}
+                              className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              aria-label="Delete scan"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </MotionCard>
+          )}
+        </motion.div>
+      </div>
+    ) : (
+            <EmptyHero
+              selectedProject={selectedProject}
+              totalScans={totalScans}
+              lastRunRelative={lastRunRelative}
+              projects={projects}
+              setSelectedProject={setSelectedProject}
+              setDeleteProjectDialogOpen={setDeleteProjectDialogOpen}
+              navigate={navigate}
+            />
+          )}
+        </div>
+      )}
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
@@ -1166,7 +1269,7 @@ export default function DashboardNew() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </main>
     </TooltipProvider>
   )
 }
