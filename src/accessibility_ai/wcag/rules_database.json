@@ -2,7 +2,10 @@
   "button-name": {
     "title": "Buttons must have discernible text",
     "description": "Ensures buttons have discernible text that describes their purpose",
-    "wcag": ["4.1.2", "2.5.3"],
+    "wcag": [
+      "4.1.2",
+      "2.5.3"
+    ],
     "wcag_level": "A",
     "severity": "critical",
     "impact_score": 95,
@@ -13,11 +16,11 @@
       "Non-semantic clickable elements"
     ],
     "fix_by_framework": {
-      "html": "<button aria-label=\"Search\">🔍</button>",
-      "react": "<button aria-label=\"Search\"><SearchIcon /></button>",
-      "vue": "<button :aria-label=\"$t('search')\"><Icon name=\"search\" /></button>",
-      "angular": "<button [attr.aria-label]=\"'Search'\"><mat-icon>search</mat-icon></button>",
-      "svelte": "<button aria-label=\"Search\"><Icon /></button>"
+      "html": "<button aria-label=\"<ACTION>\">...</button> <!-- Set label to the action, e.g., Previous slide / Next slide / Close / Search -->",
+      "react": "<button aria-label=\"<ACTION>\"><Icon /></button> <!-- Label should match the action (Previous slide / Next slide / Close / Search) -->",
+      "vue": "<button :aria-label=\"actionLabel\"><Icon name=\"action\" /></button> <!-- Set actionLabel to the real action (e.g., 'Previous slide') -->",
+      "angular": "<button [attr.aria-label]=\"actionLabel\"><mat-icon>action</mat-icon></button> <!-- actionLabel should match the button action (Previous/Next/Close/Search) -->",
+      "svelte": "<button aria-label={actionLabel}><Icon /></button> <!-- actionLabel should match the action, e.g., Previous slide / Next slide / Close / Search -->"
     },
     "explanation": "Add visible text content or aria-label attribute to describe the button's action",
     "effort_minutes": 2,
@@ -26,7 +29,9 @@
   "image-alt": {
     "title": "Images must have alternate text",
     "description": "Ensures <img> elements have alternate text or role for decorative images",
-    "wcag": ["1.1.1"],
+    "wcag": [
+      "1.1.1"
+    ],
     "wcag_level": "A",
     "severity": "critical",
     "impact_score": 90,
@@ -50,7 +55,10 @@
   "color-contrast": {
     "title": "Elements must have sufficient color contrast",
     "description": "Ensures text and background colors meet WCAG contrast ratio requirements",
-    "wcag": ["1.4.3", "1.4.6"],
+    "wcag": [
+      "1.4.3",
+      "1.4.6"
+    ],
     "wcag_level": "AA",
     "severity": "serious",
     "impact_score": 85,
@@ -74,7 +82,11 @@
   "label": {
     "title": "Form elements must have labels",
     "description": "Ensures every form input has an associated label",
-    "wcag": ["1.3.1", "3.3.2", "4.1.2"],
+    "wcag": [
+      "1.3.1",
+      "3.3.2",
+      "4.1.2"
+    ],
     "wcag_level": "A",
     "severity": "critical",
     "impact_score": 92,
@@ -98,7 +110,10 @@
   "link-name": {
     "title": "Links must have discernible text",
     "description": "Ensures links have descriptive text explaining their purpose",
-    "wcag": ["2.4.4", "4.1.2"],
+    "wcag": [
+      "2.4.4",
+      "4.1.2"
+    ],
     "wcag_level": "A",
     "severity": "serious",
     "impact_score": 88,
@@ -122,7 +137,9 @@
   "heading-order": {
     "title": "Heading levels should increase by one",
     "description": "Ensures heading tags follow logical hierarchy (h1 → h2 → h3)",
-    "wcag": ["1.3.1"],
+    "wcag": [
+      "1.3.1"
+    ],
     "wcag_level": "A",
     "severity": "moderate",
     "impact_score": 70,
@@ -146,7 +163,9 @@
   "duplicate-id": {
     "title": "IDs must be unique",
     "description": "Ensures every id attribute value is unique on the page",
-    "wcag": ["4.1.1"],
+    "wcag": [
+      "4.1.1"
+    ],
     "wcag_level": "A",
     "severity": "moderate",
     "impact_score": 75,
@@ -170,7 +189,9 @@
   "html-has-lang": {
     "title": "Page must have a language attribute",
     "description": "Ensures <html> element has a lang attribute",
-    "wcag": ["3.1.1"],
+    "wcag": [
+      "3.1.1"
+    ],
     "wcag_level": "A",
     "severity": "serious",
     "impact_score": 80,
@@ -194,7 +215,9 @@
   "landmark-one-main": {
     "title": "Page must have one main landmark",
     "description": "Ensures page has exactly one main landmark",
-    "wcag": ["1.3.1"],
+    "wcag": [
+      "1.3.1"
+    ],
     "wcag_level": "A",
     "severity": "moderate",
     "impact_score": 72,
@@ -218,7 +241,9 @@
   "list": {
     "title": "Lists must only contain list items",
     "description": "Ensures <ul> and <ol> only contain <li> elements",
-    "wcag": ["1.3.1"],
+    "wcag": [
+      "1.3.1"
+    ],
     "wcag_level": "A",
     "severity": "moderate",
     "impact_score": 65,
@@ -242,7 +267,9 @@
   "aria-required-attr": {
     "title": "ARIA roles must have required attributes",
     "description": "Ensures elements with ARIA roles have all required attributes",
-    "wcag": ["4.1.2"],
+    "wcag": [
+      "4.1.2"
+    ],
     "wcag_level": "A",
     "severity": "critical",
     "impact_score": 88,
@@ -266,7 +293,9 @@
   "aria-valid-attr-value": {
     "title": "ARIA attributes must have valid values",
     "description": "Ensures ARIA attributes have values that are valid",
-    "wcag": ["4.1.2"],
+    "wcag": [
+      "4.1.2"
+    ],
     "wcag_level": "A",
     "severity": "serious",
     "impact_score": 82,
@@ -290,7 +319,9 @@
   "aria-valid-attr": {
     "title": "ARIA attributes must have valid names",
     "description": "Ensures attributes that begin with aria- are valid ARIA attributes for the element",
-    "wcag": ["4.1.2"],
+    "wcag": [
+      "4.1.2"
+    ],
     "wcag_level": "A",
     "severity": "serious",
     "impact_score": 82,
@@ -314,7 +345,9 @@
   "input-button-name": {
     "title": "Input buttons must have discernible text",
     "description": "Ensures input buttons have discernible text",
-    "wcag": ["4.1.2"],
+    "wcag": [
+      "4.1.2"
+    ],
     "wcag_level": "A",
     "severity": "critical",
     "impact_score": 90,
@@ -338,7 +371,9 @@
   "select-name": {
     "title": "Select elements must have labels",
     "description": "Ensures select elements have an accessible name",
-    "wcag": ["4.1.2"],
+    "wcag": [
+      "4.1.2"
+    ],
     "wcag_level": "A",
     "severity": "critical",
     "impact_score": 90,
@@ -362,7 +397,9 @@
   "meta-viewport": {
     "title": "Page must have proper viewport meta tag",
     "description": "Ensures viewport meta tag allows zooming for accessibility",
-    "wcag": ["1.4.4"],
+    "wcag": [
+      "1.4.4"
+    ],
     "wcag_level": "AA",
     "severity": "serious",
     "impact_score": 78,
@@ -386,7 +423,9 @@
   "frame-title": {
     "title": "Frames must have title attribute",
     "description": "Ensures iframe and frame elements have a title",
-    "wcag": ["4.1.2"],
+    "wcag": [
+      "4.1.2"
+    ],
     "wcag_level": "A",
     "severity": "serious",
     "impact_score": 85,
@@ -410,7 +449,9 @@
   "document-title": {
     "title": "Page must have a title",
     "description": "Ensures document has a non-empty <title> element",
-    "wcag": ["2.4.2"],
+    "wcag": [
+      "2.4.2"
+    ],
     "wcag_level": "A",
     "severity": "serious",
     "impact_score": 86,
@@ -434,7 +475,9 @@
   "tabindex": {
     "title": "Elements should not have tabindex greater than 0",
     "description": "Ensures tabindex values are not greater than 0",
-    "wcag": ["2.4.3"],
+    "wcag": [
+      "2.4.3"
+    ],
     "wcag_level": "A",
     "severity": "serious",
     "impact_score": 77,
@@ -458,7 +501,9 @@
   "video-caption": {
     "title": "Video elements must have captions",
     "description": "Ensures video elements have captions",
-    "wcag": ["1.2.2"],
+    "wcag": [
+      "1.2.2"
+    ],
     "wcag_level": "A",
     "severity": "critical",
     "impact_score": 93,
@@ -482,7 +527,9 @@
   "definition-list": {
     "title": "Definition lists must be structured properly",
     "description": "Ensures <dl> elements only contain <dt> and <dd> elements",
-    "wcag": ["1.3.1"],
+    "wcag": [
+      "1.3.1"
+    ],
     "wcag_level": "A",
     "severity": "moderate",
     "impact_score": 68,
@@ -506,7 +553,9 @@
   "object-alt": {
     "title": "Object elements must have alternative text",
     "description": "Ensures <object> elements have alternative text",
-    "wcag": ["1.1.1"],
+    "wcag": [
+      "1.1.1"
+    ],
     "wcag_level": "A",
     "severity": "serious",
     "impact_score": 82,
@@ -530,7 +579,10 @@
   "area-alt": {
     "title": "Image map areas must have alternative text",
     "description": "Ensures <area> elements in image maps have alt text",
-    "wcag": ["1.1.1", "2.4.4"],
+    "wcag": [
+      "1.1.1",
+      "2.4.4"
+    ],
     "wcag_level": "A",
     "severity": "critical",
     "impact_score": 87,
@@ -549,6 +601,28 @@
     },
     "explanation": "Add descriptive alt attribute to all <area> elements in image maps",
     "effort_minutes": 2,
+    "requires_ai": false
+  },
+  "iframe-title": {
+    "title": "Iframe has no accessible name (missing title)",
+    "description": "Iframes must have a non-empty title attribute describing the frame's purpose.",
+    "wcag": [
+      "2.4.1",
+      "4.1.2"
+    ],
+    "wcag_level": "AA",
+    "severity": "high",
+    "tags": [
+      "frames",
+      "name",
+      "navigation"
+    ],
+    "fix_by_framework": {
+      "html": "Add a descriptive title attribute to the <iframe> element. Example: <iframe title=\"Payment provider\" ...></iframe>.",
+      "react": "Add a title prop/attribute to the iframe element: <iframe title=\"…\" ... />."
+    },
+    "explanation": "Screen readers announce iframes using their accessible name. Without a title, users cannot distinguish embedded content.",
+    "effort_minutes": 5,
     "requires_ai": false
   }
 }

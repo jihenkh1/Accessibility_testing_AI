@@ -6,6 +6,7 @@ import logging
 import time
 import asyncio
 import aiohttp
+import re
 from threading import Lock
 from typing import Dict, Any, Optional, List, Literal, Union
 from requests.adapters import HTTPAdapter
@@ -122,7 +123,7 @@ class AIResponse(BaseModel):
     """Strict schema for AI enrichment output."""
     priority: Literal['critical', 'high', 'medium', 'low'] = Field(default='medium')
     user_impact: str = ""
-    fix_suggestion: Union[str, List[str]] = Field(default_factory=list)
+    fix_suggestion: List[str] = Field(default_factory=list)
     effort_minutes: int = 15
     effort_rationale: Optional[str] = None
 
@@ -159,6 +160,24 @@ class AIResponse(BaseModel):
             return [stripped] if stripped else []
         return [str(v)]
 
+    @field_validator("fix_plan", mode="before")
+    @classmethod
+    def coerce_fix_plan(cls, v: Any) -> List[Dict[str, Any]]:
+        if v is None:
+            return []
+        if isinstance(v, dict):
+            # AI sometimes returns a single object with approach/avoid/etc.
+            return [v]
+        if isinstance(v, list):
+            out: List[Dict[str, Any]] = []
+            for item in v:
+                if isinstance(item, dict):
+                    out.append(item)
+                else:
+                    out.append({"step": str(item)})
+            return out
+        return [{"step": str(v)}]
+
     @field_validator("confidence", mode="before")
     @classmethod
     def coerce_confidence(cls, v: Any) -> Optional[int]:
@@ -168,6 +187,21 @@ class AIResponse(BaseModel):
             return int(v)
         except (TypeError, ValueError):
             return None
+
+    @field_validator("fix_suggestion", mode="after")
+    @classmethod
+    def validate_quality(cls, v: List[str]) -> List[str]:
+        """Ensure fix suggestions meet quality standards (warn but don't reject)."""
+        if not v:
+            return ["Contact accessibility team for specific guidance"]
+
+        for suggestion in v:
+            if suggestion is None:
+                continue
+            if len(str(suggestion).strip()) < 10:
+                logger.warning(f"Very short fix suggestion: {str(suggestion)[:50]}")
+
+        return v
 
 
 @dataclass
@@ -259,12 +293,13 @@ class UsageStats:
 class SimpleAIClient:
     """
     Enhanced AI client for OpenRouter with better error handling and prompts
+    Optimized for Mistral Devstral and other free models
     """
 
     def __init__(self):
         self.api_key = _get_cfg('OPENROUTER_API_KEY')
         self.base_url = _get_cfg('OPENROUTER_BASE_URL', "https://openrouter.ai/api/v1")
-        self.model = _get_cfg('OPENROUTER_MODEL', "tngtech/deepseek-r1t2-chimera:free")  # Default model
+        self.model = _get_cfg('OPENROUTER_MODEL', "mistralai/devstral-2512:free")  # Default model
         try:
             self.timeout = int(_get_cfg('OPENROUTER_TIMEOUT', "30") or "30")
         except ValueError:
@@ -284,6 +319,11 @@ class SimpleAIClient:
         self.price_per_1m_prompt_tokens = 0.0
         self.price_per_1m_completion_tokens = 0.0
         
+        # Model-specific settings (will be configured below)
+        self.max_tokens = 800
+        self.temperature = 0.1
+        self.supports_json_mode = False
+        
         # Setup session with retry logic
         self.session = requests.Session()
         
@@ -300,10 +340,43 @@ class SimpleAIClient:
         self.session.mount("https://", adapter)
         self.session.mount("http://", adapter)
 
+        # Apply model-specific configuration
+        self._configure_for_model()
+
         if not self.api_key:
             logger.warning("OpenRouter API key not found. AI features will be disabled.")
         else:
-            logger.info("AI Client initialized with OpenRouter (rate limiting + usage tracking enabled)")
+            logger.info(f"AI Client initialized with {self.model} (rate limiting + usage tracking enabled)")
+
+    def _configure_for_model(self):
+        """Apply model-specific settings for optimal JSON generation"""
+        model_lower = self.model.lower()
+        
+        if "mistral" in model_lower or "devstral" in model_lower:
+            # Mistral needs explicit instructions and more tokens
+            self.max_tokens = 1200
+            self.temperature = 0.0  # Very deterministic for JSON
+            self.supports_json_mode = False
+            logger.info("✓ Configured for Mistral/Devstral model")
+        
+        elif "deepseek" in model_lower:
+            self.max_tokens = 800
+            self.temperature = 0.2
+            self.supports_json_mode = False
+            logger.warning("⚠ DeepSeek can produce malformed JSON - consider switching to Mistral")
+        
+        elif "gpt" in model_lower:
+            self.max_tokens = 800
+            self.temperature = 0.1
+            self.supports_json_mode = True
+            logger.info("✓ Configured for GPT model with JSON mode")
+        
+        else:
+            # Safe defaults for unknown models
+            self.max_tokens = 800
+            self.temperature = 0.1
+            self.supports_json_mode = False
+            logger.info(f"Using default configuration for model: {self.model}")
 
     @property
     def prompt_version(self) -> str:
@@ -331,7 +404,12 @@ class SimpleAIClient:
         if not self.is_available():
             return None
             
-        prompt = self._build_comprehensive_prompt(issue_description, elements, impact, rule_id, framework)
+        # If caller didn't provide element_count, infer from elements list
+        element_count = None
+        if element_count is None and elements and isinstance(elements, list):
+            element_count = len(elements)
+
+        prompt = self._build_comprehensive_prompt(issue_description, elements, impact, rule_id, framework, element_count)
 
         try:
             response = self._make_api_call(prompt)
@@ -343,17 +421,39 @@ class SimpleAIClient:
             logger.error(f"AI analysis failed: {e}")
             return None
 
-    def _build_comprehensive_prompt(self, issue_description: str, elements: Optional[list] = None, impact: Optional[str] = None, rule_id: Optional[str] = None, framework: Optional[str] = None) -> str:
-        """Build comprehensive prompt using a compact knowledge base and structured requirements"""
-        # Normalize inputs
+    def _build_comprehensive_prompt(
+        self,
+        issue_description: str,
+        elements: Optional[list],
+        impact: Optional[str] = None,
+        rule_id: Optional[str] = None,
+        framework: Optional[str] = None,
+        element_count: Optional[int] = None,
+    ) -> str:
+        """
+        Build a strict, developer-friendly prompt.
+        Key rules:
+          - Never invent data (colors, ratios, user percentages, file locations).
+          - Prefer evidence-based fixes using provided context.
+          - Provide actionable steps + acceptance criteria + verification.
+        """
         framework_norm = (framework or "html").lower()
-        elems = list(elements or [])
-        elems = elems[:3]  # keep prompt compact
-        elements_text = f"Affected selectors: {elems}" if elems else "Affected selectors: []"
         impact_text = f"Impact level: {impact}" if impact else "Impact level: unknown"
 
-        # Inject compact knowledge for common rule ids
-        # Built-in compact knowledge base only (dynamic refs disabled)
+        # Format element context for the prompt
+        elements_text = self._format_elements_for_prompt(elements, rule_id)
+
+        # Try to detect occurrence_count from merged metadata (if present)
+        occurrences = None
+        if isinstance(elements, list) and elements and isinstance(elements[0], dict) and "occurrence_count" in elements[0]:
+            try:
+                occurrences = int(elements[0].get("occurrence_count") or 0) or None
+            except (TypeError, ValueError):
+                occurrences = None
+
+        occ_text = f"Occurrences (grouped): {occurrences}" if occurrences else ""
+
+        # Add compact rule knowledge if available
         kb = self._get_rule_knowledge(rule_id, framework_norm)
         kb_text = ""
         if kb:
@@ -365,61 +465,196 @@ class SimpleAIClient:
                 f"Example ({framework_norm}): {kb.get('example', '')}\n"
             )
 
-        # Few-shot style: compact example to enforce structure and concrete fixes
+        # High-quality example WITHOUT fake precision or invented values
         example_json = {
             "priority": "high",
-            "user_impact": "Low-contrast text is hard to read for low-vision users.",
-            "fix_suggestion": "- Change body text color from #777777 to #595959 (4.6:1)\n- Update success badge text to #1E7B1E (4.5:1)\n- Re-test in WebAIM Contrast Checker",
-            "effort_minutes": 20,
-            "effort_rationale": "3 CSS variable updates with re-test",
-            "wcag_refs": ["WCAG 1.4.3"],
+            "user_impact": "Screen reader users may not be able to identify the control’s purpose, blocking interaction.",
+            "fix_suggestion": [
+                "If the control is icon-only, add an accessible name (aria-label) that describes the action (e.g., \"Close dialog\", \"Next slide\").",
+                "If visible text is appropriate, add descriptive text content inside the element.",
+                "If an on-screen label already exists, reference it using aria-labelledby."
+            ],
+            "effort_minutes": 10,
+            "code_example": "<button aria-label=\"Close dialog\">✕</button>",
+            "wcag_refs": ["4.1.2", "2.5.3"],
             "acceptance_criteria": [
-                "All text meets >=4.5:1 (normal) or 3:1 (large)",
-                "No contrast issues reported by axe/pa11y"
+                "The element exposes a non-empty accessible name in the Accessibility Tree.",
+                "A screen reader announces the element name and role (e.g., “Close dialog, button”).",
+                "The issue is no longer reported by the scanner for the same page state."
             ],
             "test_steps": [
-                "Open page, run WebAIM Contrast Checker on body text and badges",
-                "Run axe DevTools; confirm no 1.4.3 failures"
+                "Open Chrome DevTools → Elements → Accessibility and confirm the Name is populated.",
+                "Navigate with keyboard (Tab/Shift+Tab) and confirm focus order is correct.",
+                "Test with a screen reader (NVDA/VoiceOver): focus the control and confirm the announced label matches its action."
             ],
+            "automation_hints": [
+                "Add an assertion that the element has a non-empty accessible name (e.g., aria-label or textContent)."
+            ],
+            "root_cause_hypothesis": "Element has no visible text and no ARIA labeling attributes.",
+            "component_guess": "IconButton / carousel control / dialog close button",
             "fix_plan": [
                 {
-                    "selector": ".body-text",
-                    "current_fg": "#777777",
-                    "current_bg": "#FFFFFF",
-                    "current_ratio": "2.8:1",
-                    "recommended_fg": "#595959",
-                    "recommended_ratio": "4.6:1"
+                    "approach": "Choose ONE: visible text, aria-label, or aria-labelledby (preferred if on-screen label exists).",
+                    "avoid": [
+                        "Do not use aria-label that repeats nearby visible text unless necessary.",
+                        "Do not use generic labels like \"button\"."
+                    ]
                 }
-            ]
+            ],
+            "ticket_title": "Add accessible name to unlabeled button",
+            "ticket_body": "One or more buttons are missing an accessible name. Add visible text or ARIA labeling so assistive technologies can identify the action.",
+            "confidence": 80,
+            "risk_level": "low"
         }
 
         prompt = (
-            "You are an expert web accessibility consultant. Return STRICT JSON only.\n"
-            "Keep answers concise and actionable.\n\n"
-            f"ISSUE: {issue_description}\n{elements_text}\n{impact_text}\n\n"
-            f"Knowledge (use if relevant):\n{kb_text}\n"
-            "Required JSON fields:\n"
-            "- priority: critical|high|medium|low\n"
-            "- user_impact: 1-2 sentences, plain language\n"
-            "- fix_suggestion: array of short strings; each string is a concrete action (include selectors/values when possible)\n"
-            "- effort_minutes: integer 5-240\n"
-            "- effort_rationale: short reason for the effort estimate\n"
-            "- wcag_refs: list of WCAG refs (e.g., \"WCAG 1.4.3\")\n"
-            "- acceptance_criteria: list of testable outcomes\n"
-            "- test_steps: list of quick verify steps\n"
-            "- automation_hints: list (optional)\n"
-            "- code_example: short snippet if helpful (optional)\n"
-            "- fix_plan: array of objects for specific selectors/fields. For color issues, include selector, current_fg, current_bg, current_ratio, recommended_fg, recommended_bg (if applicable), recommended_ratio.\n"
-            "- component_guess, root_cause_hypothesis, ticket_title/ticket_body, confidence, risk_level: optional\n\n"
-            "Rules:\n"
-            "- Be specific: include selectors or attributes if provided.\n"
-            "- For contrast issues: propose actual color values and ratios if any hint is available; otherwise describe the exact steps to pick compliant colors.\n"
-            "- Keep text short; no prose outside JSON. Do not emit markdown or YAML bullets outside JSON arrays.\n\n"
-            f"Example (style only): {json.dumps(example_json)}\n\n"
-            f"Prompt-Version: {PROMPT_VERSION}\n"
-            "Respond with ONLY valid JSON, no extra text."
+            "CRITICAL INSTRUCTION: Return ONLY valid JSON. No markdown. No commentary.\n\n"
+            "You are a senior accessibility engineer writing developer-ready remediation guidance.\n\n"
+            "ISSUE INPUT:\n"
+            f"- Issue description: {issue_description}\n"
+            f"- {impact_text}\n"
+            f"- Rule ID: {rule_id or 'unknown'}\n"
+            f"- Framework: {framework_norm}\n"
+            f"- {occ_text}\n\n"
+            f"{elements_text}\n\n"
+            "RULE KNOWLEDGE (if available):\n"
+            f"{kb_text if kb_text else 'None'}\n\n"
+            "STRICT RULES (DO NOT VIOLATE):\n"
+            "1) DO NOT invent numbers, user percentages, file locations, colors, or contrast ratios.\n"
+            "2) If the scanner did NOT provide foreground/background colors or a recommended color, DO NOT output hex values.\n"
+            "   - For contrast, provide process-based guidance (adjust token, verify with checker) and validation steps.\n"
+            "3) DO NOT guess labels like \"Search\" unless the context clearly indicates it.\n"
+            "   - If action is unknown, use a placeholder pattern: \"<ACTION>\" and tell dev to set the correct action label.\n"
+            "4) Make suggestions specific to the provided HTML/context when possible.\n"
+            "5) Output must be concise but actionable for a developer.\n\n"
+            "OUTPUT JSON SCHEMA (must include these keys):\n"
+            "{\n"
+            "  \"priority\": \"critical|high|medium|low\",\n"
+            "  \"user_impact\": \"...\",\n"
+            "  \"fix_suggestion\": [\"...\"],\n"
+            "  \"effort_minutes\": 1,\n"
+            "  \"code_example\": \"...\" | null,\n"
+            "  \"wcag_refs\": [\"...\"],\n"
+            "  \"acceptance_criteria\": [\"...\"],\n"
+            "  \"test_steps\": [\"...\"],\n"
+            "  \"automation_hints\": [\"...\"],\n"
+            "  \"root_cause_hypothesis\": \"...\" | null,\n"
+            "  \"component_guess\": \"...\" | null,\n"
+            "  \"fix_plan\": [ { ... } ] | null,\n"
+            "  \"ticket_title\": \"...\" | null,\n"
+            "  \"ticket_body\": \"...\" | null,\n"
+            "  \"confidence\": 0,\n"
+            "  \"risk_level\": \"low|medium|high\" | null\n"
+            "}\n\n"
+            f"EXAMPLE OUTPUT (style reference only):\n{json.dumps(example_json, indent=2)}\n\n"
+            f"Prompt-Version: {PROMPT_VERSION}\n\n"
+            "NOW RETURN ONLY THE JSON OBJECT FOR THE ISSUE INPUT ABOVE:"
         )
+
         return prompt
+
+    def _format_elements_for_prompt(self, elements: Optional[list], rule_id: Optional[str]) -> str:
+        """Format element context for the prompt.
+
+        Accepts list of selectors (strings) or list of dicts with keys like
+        'selector', 'html', 'tag', 'role', 'aria_label', 'fg_color', 'bg_color', 'contrast_ratio'.
+        Returns a readable, truncated text block for inclusion in prompts.
+        """
+        if not elements:
+            return "AFFECTED SELECTORS: []"
+
+        # If elements is a dict-like wrapper, try to extract inner list
+        if isinstance(elements, dict) and elements.get("elements"):
+            elems = elements.get("elements")
+        else:
+            elems = elements
+
+        if not isinstance(elems, list):
+            try:
+                return f"AFFECTED SELECTORS: {str(elems)}"
+            except Exception:
+                return "AFFECTED SELECTORS: []"
+
+        meta_occurrences = None
+        # If the analyzer merged occurrences, it may prepend a synthetic meta dict:
+        #   {"occurrence_count": N}
+        # Remove it from the element list and expose count to the prompt.
+        if isinstance(elems, list) and elems and isinstance(elems[0], dict) and ("occurrence_count" in elems[0]) and (len(elems[0].keys()) == 1):
+            try:
+                raw_count = elems[0].get("occurrence_count")
+
+                meta_occurrences = int(raw_count) if isinstance(raw_count, (int, str)) else 1
+            except Exception:
+                meta_occurrences = None
+            elems = elems[1:]
+
+        lines = ["AFFECTED ELEMENTS (showing up to 5):"]
+        if meta_occurrences:
+            lines.append(f"Total occurrences in report: {meta_occurrences}")
+        for i, node in enumerate(elems[:5], 1):
+            if isinstance(node, dict):
+                selector = node.get('selector') or node.get('target') or 'unknown-selector'
+                # defensive sanitize
+                try:
+                    selector = str(selector)
+                    if not selector or selector.lower() in ('none', 'undefined'):
+                        selector = 'unknown-selector'
+                except Exception:
+                    selector = 'unknown-selector'
+
+                html = node.get('html') or ''
+                tag = node.get('tag') or self._extract_tag_from_html(html) or 'unknown'
+                role = node.get('role') or node.get('current_role') or 'none'
+                aria = node.get('aria_label') or node.get('aria-label') or 'none'
+
+                lines.append(f"\nElement {i}:")
+                lines.append(f"  Selector: {selector}")
+                lines.append(f"  Tag: <{tag}>")
+                if html:
+                    snippet = (html[:200] + '...') if len(html) > 200 else html
+                    lines.append(f"  HTML: {snippet}")
+
+                if 'fg_color' in node or 'contrast_ratio' in node:
+                    fg = node.get('fg_color') or node.get('fgColor') or 'unknown'
+                    bg = node.get('bg_color') or node.get('bgColor') or 'unknown'
+                    ratio = str(node.get('contrast_ratio') or node.get('contrastRatio') or 'unknown')
+                    lines.append(f"  Current colors: {fg} on {bg} (contrast: {ratio})")
+                    exp = node.get("expected_ratio") or node.get("expectedContrastRatio")
+                    if exp is not None:
+                        lines.append(f"  Expected contrast: {exp}:1")
+                    rec = node.get("recommended_text_color")
+                    if rec:
+                        lines.append(f"  Tool recommended text color: {rec}")
+
+                lines.append(f"  Role: {role}")
+                lines.append(f"  ARIA label: {aria}")
+            else:
+                # simple selector string
+                try:
+                    sel = str(node)
+                except Exception:
+                    sel = 'unknown-selector'
+                if not sel or sel.lower() in ('none', 'undefined'):
+                    sel = 'unknown-selector'
+                lines.append(f"\nElement {i}: Selector: {sel}")
+
+        if len(elems) > 5:
+            lines.append(f"\n... and {len(elems)-5} more elements")
+
+        return "\n".join(lines)
+
+    def _extract_tag_from_html(self, html: str) -> Optional[str]:
+        """Return the tag name from an HTML fragment, or None."""
+        if not html:
+            return None
+        try:
+            m = re.match(r"\s*<\s*(\w+)", html)
+            if m:
+                return m.group(1).lower()
+        except Exception:
+            return None
+        return None
+    
 
     def _get_rule_knowledge(self, rule_id: Optional[str], framework: str) -> Optional[Dict[str, Any]]:
         """Return compact, framework-aware guidance for common rules."""
@@ -447,7 +682,7 @@ class SimpleAIClient:
                 "common_causes": ["Missing alt on informative images", "Decorative images with empty alt not used"],
                 "guidance_by_framework": {
                     "html": "Provide meaningful alt for informative images; use alt=\"\" for decorative.",
-                    "react": "On <img>, set alt. For background/decorative, ensure it’s ignored by AT.",
+                    "react": "On <img>, set alt. For background/decorative, ensure it's ignored by AT.",
                 },
                 "example_by_framework": {
                     "html": "<img src=\"product.jpg\" alt=\"Red shoes, front view\">",
@@ -459,7 +694,7 @@ class SimpleAIClient:
                 "common_causes": ["Inputs without <label>", "Placeholder used as label"],
                 "guidance_by_framework": {
                     "html": "Associate <label for> with input id; ensure visible label.",
-                    "react": "Use <label htmlFor=...> and input id; don’t rely on placeholder.",
+                    "react": "Use <label htmlFor=...> and input id; don't rely on placeholder.",
                 },
                 "example_by_framework": {
                     "html": "<label for=\"email\">Email</label><input id=\"email\">",
@@ -478,7 +713,6 @@ class SimpleAIClient:
                     "react": "Apply theme variable with sufficient contrast (e.g., text-primary on bg-base).",
                 },
             },
-            # Link purpose must be clear
             "link-name": {
                 "wcag_refs": ["WCAG 2.4.4"],
                 "common_causes": ["Links with 'click here' or icon-only without name", "SVG/icon links lacking aria-label"],
@@ -491,12 +725,11 @@ class SimpleAIClient:
                     "react": "<a href=\"/cart\" aria-label=\"View shopping cart\"><CartIcon /></a>",
                 },
             },
-            # Focus must be visible for keyboard users
             "focus-visible": {
                 "wcag_refs": ["WCAG 2.4.7"],
                 "common_causes": ["Outline removed via CSS", "Custom components without visible focus styles"],
                 "guidance_by_framework": {
-                    "html": "Ensure a visible focus indicator (:focus or :focus-visible); don’t remove outlines.",
+                    "html": "Ensure a visible focus indicator (:focus or :focus-visible); don't remove outlines.",
                     "react": "Provide focus styles for interactive components; use :focus-visible or focus ring utilities.",
                 },
                 "example_by_framework": {
@@ -504,7 +737,6 @@ class SimpleAIClient:
                     "react": "<button className=\"focus:outline-blue-600 focus:outline-2\">Save</button>",
                 },
             },
-            # Headings: order and presence
             "heading-order": {
                 "wcag_refs": ["WCAG 1.3.1"],
                 "common_causes": ["Skipping heading levels", "Using headings for styling instead of structure"],
@@ -529,7 +761,6 @@ class SimpleAIClient:
                     "react": "<h1>Dashboard</h1>",
                 },
             },
-            # Landmarks/regions
             "landmark-one-main": {
                 "wcag_refs": ["WCAG 1.3.1", "WCAG 2.4.1"],
                 "common_causes": ["Missing <main> landmark", "Multiple main regions"],
@@ -555,6 +786,89 @@ class SimpleAIClient:
                 },
             },
         }
+        # Additional detailed rules
+        kb_map.update({
+            "identical-links-same-purpose": {
+                "wcag_refs": ["WCAG 2.4.9", "WCAG 2.4.4"],
+                "common_causes": [
+                    "Multiple 'Home' or 'Back' links without context",
+                    "Same link text in header and footer pointing to different pages",
+                    "Icon-only links without unique aria-labels"
+                ],
+                "guidance_by_framework": {
+                    "html": "Add aria-label to differentiate links OR change visible text to include context",
+                    "react": "Use aria-label prop or wrap link text with contextual information",
+                },
+                "example_by_framework": {
+                    "html": (
+                        "<!-- BEFORE: Two 'Home' links, different purposes -->\n"
+                        "<nav><a href='/'>Home</a></nav>\n"
+                        "<footer><a href='/'>Home</a></footer>\n\n"
+                        "<!-- AFTER: Differentiated with aria-label -->\n"
+                        "<nav><a href='/' aria-label='Home - Main navigation'>Home</a></nav>\n"
+                        "<footer><a href='/' aria-label='Return to homepage'>Home</a></footer>"
+                    ),
+                    "react": (
+                        "// BEFORE\n"
+                        "<Link to='/'>Home</Link>\n\n"
+                        "// AFTER\n"
+                        "<Link to='/' aria-label='Home - Main navigation'>Home</Link>"
+                    ),
+                },
+                "developer_tips": [
+                    "If links go to SAME destination with SAME purpose, this is usually fine",
+                    "Only add differentiation when links have DIFFERENT purposes or contexts",
+                    "Consider using visually hidden text instead of aria-label for better SEO"
+                ]
+            },
+            "listitem": {
+                "wcag_refs": ["WCAG 1.3.1", "WCAG 4.1.2"],
+                "common_causes": [
+                    "Carousel/slider items not wrapped in <ul>/<ol>",
+                    "Custom list styling using <div> instead of <li>",
+                    "JavaScript-generated content missing semantic markup"
+                ],
+                "guidance_by_framework": {
+                    "html": "Wrap repeating items in <ul> and each item in <li>. Preserve existing classes.",
+                    "react": "Return <ul> with <li> children. Keep carousel functionality intact.",
+                },
+                "example_by_framework": {
+                    "html": (
+                        "<!-- BEFORE: Non-semantic carousel -->\n"
+                        "<div class='carousel'>\n"
+                        "  <div class='orbit-slide'>Slide 1</div>\n"
+                        "  <div class='orbit-slide'>Slide 2</div>\n"
+                        "</div>\n\n"
+                        "<!-- AFTER: Semantic carousel -->\n"
+                        "<div class='carousel'>\n"
+                        "  <ul>\n"
+                        "    <li class='orbit-slide'>Slide 1</li>\n"
+                        "    <li class='orbit-slide'>Slide 2</li>\n"
+                        "  </ul>\n"
+                        "</div>"
+                    ),
+                    "react": (
+                        "// BEFORE\n"
+                        "<div className='carousel'>\n"
+                        "  {slides.map(s => <div className='orbit-slide'>{s}</div>)}\n"
+                        "</div>\n\n"
+                        "// AFTER\n"
+                        "<div className='carousel'>\n"
+                        "  <ul>\n"
+                        "    {slides.map(s => <li className='orbit-slide'>{s}</li>)}\n"
+                        "  </ul>\n"
+                        "</div>"
+                    ),
+                },
+                "developer_tips": [
+                    "Check if carousel library supports semantic HTML (most do)",
+                    "Test that keyboard navigation still works after change",
+                    "May need to adjust CSS if <ul> has default margins/padding",
+                    "Add role='list' if CSS list-style:none removes semantics"
+                ]
+            }
+        })
+
         if rid not in kb_map:
             return None
         entry = kb_map[rid]
@@ -564,6 +878,7 @@ class SimpleAIClient:
             "common_causes": entry.get("common_causes", []),
             "guidance": entry.get("guidance_by_framework", {}).get(framework, entry.get("guidance_by_framework", {}).get("html", "")),
             "example": entry.get("example_by_framework", {}).get(framework, entry.get("example_by_framework", {}).get("html", "")),
+            "developer_tips": entry.get("developer_tips", [])
         }
 
     def _make_api_call(self, prompt: str) -> Optional[str]:
@@ -578,25 +893,31 @@ class SimpleAIClient:
                 time.sleep(wait_time)
             
             try:
+                # Build payload
+                payload = {
+                    "model": self.model,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "You are a web accessibility expert. You MUST respond with ONLY valid JSON, no markdown, no explanation text."
+                        },
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": self.max_tokens,
+                    "temperature": self.temperature,
+                }
+                
+                # Only add response_format for models that explicitly support it
+                if self.supports_json_mode:
+                    payload["response_format"] = {"type": "json_object"}
+                
                 response = self.session.post(
                     f"{self.base_url}/chat/completions",
                     headers={
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json",
                     },
-                    json={
-                        "model": self.model,
-                        "messages": [
-                            {
-                                "role": "system",
-                                "content": "You are a web accessibility expert. Always respond with valid JSON."
-                            },
-                            {"role": "user", "content": prompt}
-                        ],
-                        "max_tokens": 800,  # Increased for code examples
-                        "temperature": 0.1,  # Lower for more consistent JSON
-                        "response_format": {"type": "json_object"}  # Force JSON mode if supported
-                    },
+                    json=payload,
                     timeout=self.timeout
                 )
                 
@@ -689,48 +1010,127 @@ class SimpleAIClient:
                     self.usage_stats.add_failure()
                 return None
 
-    def _parse_ai_response(self, response_text: str) -> Dict[str, Any]:
-        """Parse the AI response with better error handling and fallbacks"""
+    def _extract_json_object(self, text: str) -> str:
+        """Extract JSON object from text, handling markdown blocks and common issues"""
+        text = text.strip()
+        
+        # Remove markdown code blocks
+        text = re.sub(r'^```(?:json)?\s*\n?', '', text, flags=re.MULTILINE)
+        text = re.sub(r'\n?```\s*', '', text, flags=re.MULTILINE)
+        text = text.strip()
+        
+        # Find JSON object boundaries
+        start = text.find('{')
+        end = text.rfind('}')
+        
+        if start == -1 or end == -1 or end < start:
+            logger.warning("Could not find JSON object boundaries in response")
+            return text
+        
+        # Extract just the JSON
+        json_str = text[start:end + 1]
+        
+        # Fix common JSON syntax issues
+        # Remove trailing commas before closing braces/brackets
+        json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+        
+        return json_str
+
+    def _salvage_response(self, parsed_raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Try to salvage a partially valid response"""
         try:
-            # Clean the response text
-            cleaned_text = response_text.strip()
-
-            # Remove markdown code blocks if present
-            if cleaned_text.startswith('```json'):
-                cleaned_text = cleaned_text[7:]  # Remove ```json
-            elif cleaned_text.startswith('```'):
-                cleaned_text = cleaned_text[3:]  # Remove ```
+            # Ensure required fields have reasonable defaults
+            salvaged = {
+                "priority": parsed_raw.get("priority", "medium"),
+                "user_impact": parsed_raw.get("user_impact", "May affect accessibility"),
+                "fix_suggestion": parsed_raw.get("fix_suggestion", ["Review accessibility guidelines"]),
+                "effort_minutes": parsed_raw.get("effort_minutes", 15),
+                "effort_rationale": parsed_raw.get("effort_rationale"),
+                "wcag_refs": parsed_raw.get("wcag_refs", []),
+                "acceptance_criteria": parsed_raw.get("acceptance_criteria", []),
+                "test_steps": parsed_raw.get("test_steps", []),
+                "code_example": parsed_raw.get("code_example"),
+                "fix_plan": parsed_raw.get("fix_plan", []),
+                "__fallback__": False
+            }
             
-            if cleaned_text.endswith('```'):
-                cleaned_text = cleaned_text[:-3]  # Remove ```
+            # Validate the salvaged version
+            AIResponse(**salvaged)
+            logger.info("✓ Successfully salvaged partial response")
+            return salvaged
             
-            cleaned_text = cleaned_text.strip()
-            cleaned_text = _clean_json_text(cleaned_text)
+        except Exception as e:
+            logger.debug(f"Could not salvage response: {e}")
+            return None
 
+    def _validate_fix_suggestions(self, suggestions: List[str]) -> List[str]:
+        """Validate and warn about fix suggestion quality without rejecting them."""
+        WEAK_VERBS = ['review', 'ensure', 'consider', 'verify', 'check']
+        ACTION_VERBS = ['add', 'remove', 'change', 'replace', 'update', 'wrap', 'move', 'set']
+
+        validated: List[str] = []
+        for suggestion in suggestions or []:
+            try:
+                lower = suggestion.lower()
+            except Exception:
+                validated.append(str(suggestion))
+                continue
+
+            first_word = suggestion.split()[0].lower() if suggestion.split() else ''
+            if first_word in WEAK_VERBS and not any(verb in lower for verb in ACTION_VERBS):
+                logger.warning(f"Vague fix suggestion detected: {suggestion[:120]}")
+
+            has_selector = any(ch in suggestion for ch in ['.', '#', '[', '<'])
+            has_specifics = any(ch in suggestion for ch in [':', '=', '"', "'"])
+
+            if not (has_selector or has_specifics) and len(suggestion) > 50:
+                logger.warning(f"Fix suggestion lacks specifics: {suggestion[:120]}")
+
+            validated.append(suggestion)
+
+        return validated
+
+    def _parse_ai_response(self, response_text: str) -> Dict[str, Any]:
+        """Parse the AI response with enhanced error handling for Mistral"""
+        try:
+            # Debug logging
+            logger.debug("RAW AI RESPONSE (first 1000 chars):\n%s", response_text[:1000])
+            
+            # Extract and clean JSON
+            json_str = self._extract_json_object(response_text)
+            json_str = _clean_json_text(json_str)
+            
+            logger.debug("CLEANED JSON (first 500 chars):\n%s", json_str[:500])
+            
             # Try to parse JSON
             try:
-                parsed_raw = json.loads(cleaned_text, strict=False)
+                parsed_raw = json.loads(json_str, strict=False)
             except json.JSONDecodeError as e:
-                # Try to fix common JSON issues
-                logger.debug(f"Initial JSON parse failed: {e}, attempting cleanup...")
+                logger.warning(f"JSON parse failed at line {e.lineno}, col {e.colno}: {e.msg}")
+                logger.debug(f"Failed text around error:\n{json_str[max(0, e.pos-100):e.pos+100]}")
                 
-                # Try to extract JSON object if there's extra text
-                start_idx = cleaned_text.find('{')
-                end_idx = cleaned_text.rfind('}')
-                
-                if start_idx != -1 and end_idx != -1:
-                    cleaned_text = cleaned_text[start_idx:end_idx + 1]
-                    cleaned_text = _clean_json_text(cleaned_text)
-                    parsed_raw = json.loads(cleaned_text, strict=False)
-                else:
-                    raise  # Re-raise if we can't fix it
+                # Try one more time with even more aggressive cleaning
+                json_str = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', json_str)  # Remove control chars
+                parsed_raw = json.loads(json_str, strict=False)
 
             # Validate using strict Pydantic model
             try:
                 validated = AIResponse(**parsed_raw)
+                # Check fix suggestion quality and warn as needed
+                try:
+                    self._validate_fix_suggestions(validated.fix_suggestion)
+                except Exception:
+                    logger.debug("Failed to validate fix suggestions quality")
             except ValidationError as ve:
-                logger.warning(f"AI response validation failed, using fallback: {ve.errors()}")
-                logger.debug(f"Raw AI payload (first 500 chars): {str(parsed_raw)[:500]}")
+                logger.warning(f"Pydantic validation failed: {ve.errors()}")
+                logger.debug(f"Raw parsed data: {parsed_raw}")
+                
+                # Try to salvage what we can
+                salvaged = self._salvage_response(parsed_raw)
+                if salvaged:
+                    return salvaged
+                
+                # Fall back to default
                 fb = self._get_fallback_response()
                 fb["__fallback__"] = True
                 return fb
@@ -761,7 +1161,7 @@ class SimpleAIClient:
         return {
             "priority": "medium",
             "user_impact": "This accessibility issue may affect users with disabilities.",
-            "fix_suggestion": "Review and fix the accessibility issue following WCAG guidelines.",
+            "fix_suggestion": ["Review and fix the accessibility issue following WCAG guidelines."],
             "code_example": None,
             "effort_minutes": 15
         }
@@ -779,10 +1179,42 @@ class SimpleAIClient:
         except Exception as e:
             logger.error(f"Connection test failed: {e}")
             return False
-        
 
-    
-    
+    def test_model_json_capability(self) -> Dict[str, Any]:
+        """Test if the current model can produce valid JSON reliably"""
+        if not self.is_available():
+            return {"error": "API key not available"}
+        
+        test_prompt = (
+            "Respond with ONLY this JSON object, no other text:\n"
+            '{"test": "success", "number": 42, "array": ["a", "b"], "nested": {"key": "value"}}'
+        )
+        
+        try:
+            response = self._make_api_call(test_prompt)
+            if not response:
+                return {"error": "No response from API", "model": self.model}
+            
+            # Try to parse
+            try:
+                parsed = json.loads(response)
+                return {
+                    "success": True,
+                    "model": self.model,
+                    "response": parsed,
+                    "raw_length": len(response),
+                    "message": "✓ Model can produce valid JSON"
+                }
+            except json.JSONDecodeError as e:
+                return {
+                    "success": False,
+                    "model": self.model,
+                    "error": str(e),
+                    "raw_response": response[:500],
+                    "message": "✗ Model produced invalid JSON"
+                }
+        except Exception as e:
+            return {"error": f"Test failed: {e}", "model": self.model}
 
     # =====================================================
     # ASYNC API METHODS (for batch processing)
@@ -791,29 +1223,32 @@ class SimpleAIClient:
     async def _make_api_call_async(self, prompt: str, session: aiohttp.ClientSession) -> Optional[str]:
         """Async version of API call for batch processing"""
         
-        # Note: Rate limiting is handled at the batch level, not per call
-        # in the async version to allow parallel execution
-        
         try:
+            # Build payload (same as sync version)
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are a web accessibility expert. You MUST respond with ONLY valid JSON, no markdown, no explanation text."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+            }
+            
+            # Only add response_format for models that support it
+            if self.supports_json_mode:
+                payload["response_format"] = {"type": "json_object"}
+            
             async with session.post(
                 f"{self.base_url}/chat/completions",
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
                 },
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": "You are a web accessibility expert. Always respond with valid JSON."
-                        },
-                        {"role": "user", "content": prompt}
-                    ],
-                    "max_tokens": 800,
-                    "temperature": 0.1,
-                    "response_format": {"type": "json_object"}
-                },
+                json=payload,
                 timeout=aiohttp.ClientTimeout(total=self.timeout)
             ) as response:
                 
@@ -903,8 +1338,11 @@ class SimpleAIClient:
         if not self.is_available():
             return None
 
-        # Build the prompt (same as sync version)
-        prompt = self._build_comprehensive_prompt(issue_description, elements, impact, rule_id, framework)
+        # Build the prompt (same as sync version). Infer element_count if possible.
+        element_count = None
+        if elements and isinstance(elements, list):
+            element_count = len(elements)
+        prompt = self._build_comprehensive_prompt(issue_description, elements, impact, rule_id, framework, element_count)
         
         # Use provided session or create a new one
         if session:
@@ -917,39 +1355,6 @@ class SimpleAIClient:
             return None
 
         return self._parse_ai_response(response_text)
-    
-    def close(self) -> None:
-        """
-        Clean up underlying HTTP resources.
-
-        Safe to call multiple times.
-        """
-        try:
-            if hasattr(self, "session") and self.session is not None:
-                self.session.close()
-        except Exception as exc:
-            logger.debug("Error while closing HTTP session: %s", exc)
-
-    def __enter__(self) -> "SimpleAIClient":
-        """
-        Allow usage as a context manager:
-
-            with SimpleAIClient() as client:
-                ...
-
-        """
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        self.close()
-
-    
-
-
-
-
-
-
     
     async def analyze_batch_async(
         self,
@@ -1005,3 +1410,28 @@ class SimpleAIClient:
         logger.info(f"Current usage stats: {self.get_usage_stats()}")
         
         return results
+
+    def close(self) -> None:
+        """
+        Clean up underlying HTTP resources.
+
+        Safe to call multiple times.
+        """
+        try:
+            if hasattr(self, "session") and self.session is not None:
+                self.session.close()
+        except Exception as exc:
+            logger.debug("Error while closing HTTP session: %s", exc)
+
+    def __enter__(self) -> "SimpleAIClient":
+        """
+        Allow usage as a context manager:
+
+            with SimpleAIClient() as client:
+                ...
+
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Union
+from typing import List, Optional, Dict, Union, Any
 from enum import Enum
 
 class Priority(str, Enum):
@@ -13,7 +13,9 @@ class AccessibilityIssue(BaseModel):
     id: str
     description: str
     impact: str
-    elements: List[str] = Field(default_factory=list)  # safe mutable default
+    # Elements may be either selector strings (legacy) or rich dicts with
+    # selector/html/tag/role/aria/color info. Use List[Any] for flexibility.
+    elements: List[Any] = Field(default_factory=list)  # safe mutable default
 
 
 class FixSuggestion(BaseModel):

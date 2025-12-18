@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useParams, useSearchParams, Link as RouterLink } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
@@ -22,6 +22,28 @@ type Issue = {
 }
 
 type PageResult = { items: Issue[]; total: number }
+
+const sourceLabel = (source?: string) => {
+  switch ((source || '').toLowerCase()) {
+    case 'rule_database':
+      return 'Rule DB guidance'
+    case 'rule_based':
+      return 'Deterministic rule pack'
+    case 'ai_enhanced':
+      return 'AI-enhanced'
+    case 'ai_fallback':
+      return 'AI fallback'
+    default:
+      return source || 'Unknown'
+  }
+}
+
+const getIssueKey = (issue: Issue, idx: number): string => {
+  if (issue.id !== undefined && issue.id !== null) return String(issue.id)
+  const selector = issue.selector ?? ''
+  const wcag = (issue.wcag_refs || []).join(',')
+  return `${issue.rule_id}|${selector}|${wcag}`
+}
 
 // Severity badge component with color coding
 const SeverityBadge = ({ priority }: { priority: string }) => {
@@ -134,6 +156,11 @@ const IssueCard = ({
   onStatusChange: (newStatus: string) => void
 }) => {
   const currentStatus = issue.status || 'todo'
+  const [showEvidence, setShowEvidence] = useState(false)
+  const displayTitle = useMemo(() => {
+    const parts = (issue.rule_id || '').split('-').map(p => p.charAt(0).toUpperCase() + p.slice(1))
+    return parts.join(' ')
+  }, [issue.rule_id])
 
   return (
     <Card className={`border hover:border-primary/50 transition-colors ${currentStatus === 'done' ? 'opacity-60' : ''}`}>
@@ -143,25 +170,35 @@ const IssueCard = ({
           className="p-4 cursor-pointer flex items-center justify-between hover:bg-muted/50 transition-colors"
           onClick={onToggle}
         >
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="flex-shrink-0">
-              {expanded ? (
-                <ChevronDown className="w-5 h-5 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="w-5 h-5 text-muted-foreground" />
-              )}
-            </div>
-            <SeverityBadge priority={issue.priority} />
-            <StatusBadge status={currentStatus} />
-            <div className="flex-1 min-w-0">
-              <div className={`font-medium truncate ${currentStatus === 'done' ? 'line-through' : ''}`}>
-                {issue.rule_id}
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="flex-shrink-0">
+                {expanded ? (
+                  <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                )}
               </div>
-              <div className="text-xs text-muted-foreground">
-                {issue.effort_minutes}min • {issue.wcag_refs?.join(', ') || 'N/A'}
+              <SeverityBadge priority={issue.priority} />
+              <StatusBadge status={currentStatus} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className={`font-medium truncate ${currentStatus === 'done' ? 'line-through' : ''}`} title={issue.rule_id}>
+                    {displayTitle}
+                  </div>
+                  {issue.source && (
+                    <Badge variant="outline" className="text-[10px] px-2">
+                      {sourceLabel(issue.source)}
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-xs text-muted-foreground flex items-center gap-2">
+                  <span>{issue.effort_minutes}min</span>
+                  <span>•</span>
+                  <span className="truncate">{issue.wcag_refs?.join(', ') || 'N/A'}</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground">#{index + 1}</span>
+                </div>
               </div>
             </div>
-          </div>
           <div className="flex items-center gap-3 flex-shrink-0 ml-4">
             {issue.id && (
               <StatusDropdown
@@ -170,58 +207,61 @@ const IssueCard = ({
                 onStatusChange={onStatusChange}
               />
             )}
-            <span className="text-xs text-muted-foreground">#{index + 1}</span>
           </div>
         </div>
 
         {/* Expanded view - shows on click */}
         {expanded && (
           <div className="border-t p-4 space-y-4 bg-muted/20">
+            {/* Fix Suggestion */}
+            <div className="bg-muted/40 border rounded-md p-3 space-y-2">
+              <div className="text-xs font-semibold text-muted-foreground uppercase flex items-center justify-between">
+                Recommended fix
+                <CopyButton text={issue.fix_suggestion} label="Copy" />
+              </div>
+              <pre className="text-sm bg-background p-3 rounded border whitespace-pre-wrap break-words overflow-auto">
+                <code className="whitespace-pre-wrap break-words">{issue.fix_suggestion}</code>
+              </pre>
+            </div>
+
             {/* User Impact */}
             <div>
               <div className="text-xs font-semibold text-muted-foreground uppercase mb-1">
-                User Impact
+                Why this matters
               </div>
               <div className="text-sm">{issue.user_impact}</div>
             </div>
 
-            {/* Fix Suggestion */}
-            <div>
-              <div className="text-xs font-semibold text-muted-foreground uppercase mb-1 flex items-center justify-between">
-                Fix Suggestion
-                <CopyButton text={issue.fix_suggestion} label="Copy" />
-              </div>
-              <pre className="text-sm bg-card p-3 rounded-md border whitespace-pre-wrap break-words overflow-auto">
-                <code>{issue.fix_suggestion}</code>
-              </pre>
-            </div>
-
-            {/* Selector */}
+            {/* Evidence (CSS Selector) */}
             {issue.selector && (
               <div>
                 <div className="text-xs font-semibold text-muted-foreground uppercase mb-1 flex items-center justify-between">
-                  CSS Selector
-                  <CopyButton text={issue.selector} label="Copy" />
+                  <span className="flex items-center gap-2">
+                    Evidence {issue.selector ? '(selector available)' : ''}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setShowEvidence((v) => !v)
+                    }}
+                    className="text-xs text-primary underline underline-offset-2"
+                    aria-expanded={showEvidence}
+                  >
+                    {showEvidence ? 'Hide' : 'Show'}
+                  </button>
                 </div>
-                <code className="text-sm bg-card p-2 rounded-md border block overflow-x-auto">
-                  {issue.selector}
-                </code>
-              </div>
-            )}
-
-            {/* Analysis Source */}
-            {issue.source && (
-              <div>
-                <div className="text-xs font-semibold text-muted-foreground uppercase mb-1 flex items-center justify-between">
-                  Analysis Source
-                  <CopyButton text={issue.source} label="Copy" />
-                </div>
-                <p className="text-xs text-muted-foreground mb-2">
-                  ai_enhanced = AI generated · rule_database = rule DB guidance · rule_based = fallback defaults
-                </p>
-                <pre className="text-sm bg-card p-3 rounded-md border overflow-x-auto max-h-32">
-                  <code>{issue.source}</code>
-                </pre>
+                {showEvidence && (
+                  <>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase mb-1 flex items-center justify-between">
+                      CSS Selector
+                      <CopyButton text={issue.selector} label="Copy" />
+                    </div>
+                    <code className="text-sm bg-card p-2 rounded-md border block overflow-x-auto">
+                      {issue.selector}
+                    </code>
+                  </>
+                )}
               </div>
             )}
 
@@ -230,12 +270,14 @@ const IssueCard = ({
               <div className="text-xs font-semibold text-muted-foreground uppercase">
                 WCAG:
               </div>
-              {issue.wcag_refs?.map((ref, i) => (
-                <Badge key={i} variant="outline" className="text-xs">
-                  {ref}
-                </Badge>
-              ))}
-              <CopyButton text={issue.wcag_refs?.join(', ') || ''} />
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm">
+                  {issue.wcag_refs && issue.wcag_refs.length > 0
+                    ? issue.wcag_refs.join(' \u2022 ')
+                    : 'N/A'}
+                </span>
+                <CopyButton text={issue.wcag_refs?.join(', ') || ''} />
+              </div>
             </div>
 
             {/* Quick Stats Footer */}
@@ -261,7 +303,7 @@ export default function RunIssues() {
   const [q, setQ] = useState<string>(searchParams.get('q') || '')
   const [page, setPage] = useState<number>(Number(searchParams.get('page') || '1'))
   const [size, setSize] = useState<number>(Number(searchParams.get('size') || '50'))
-  const [expandedIssues, setExpandedIssues] = useState<Set<number>>(new Set())
+  const [expandedIssues, setExpandedIssues] = useState<Set<string>>(new Set())
   const [groupBySeverity, setGroupBySeverity] = useState<boolean>(false)
   const [statusFilter, setStatusFilter] = useState<string>('all')
 
@@ -281,6 +323,13 @@ export default function RunIssues() {
     },
     enabled: !Number.isNaN(runId),
   })
+
+  useEffect(() => {
+    if (expandedIssues.size === 0 && data?.items?.length) {
+      const firstKey = getIssueKey(data.items[0], (page - 1) * size)
+      setExpandedIssues(new Set([firstKey]))
+    }
+  }, [data, page, size, expandedIssues])
 
   // Fetch status summary
   const { data: statusSummary } = useQuery({
@@ -441,8 +490,8 @@ export default function RunIssues() {
                   </div>
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" onClick={() => {
-                      const allIndexes = data.items.map((_, idx) => (page - 1) * size + idx)
-                      setExpandedIssues(new Set(allIndexes))
+                      const keys = data.items.map((it, idx) => getIssueKey(it, (page - 1) * size + idx))
+                      setExpandedIssues(new Set(keys))
                     }}>
                       Expand All
                     </Button>
@@ -485,20 +534,21 @@ export default function RunIssues() {
                     </div>
                     <div className="space-y-2">
                       {severityIssues.map((issue: Issue, idx: number) => {
-                        const issueIndex = (page - 1) * size + data.items.indexOf(issue)
+                        const issueIndex = (page - 1) * size + idx
+                        const issueKey = getIssueKey(issue, issueIndex)
                         return (
                           <IssueCard 
-                            key={`${severity}-${idx}`} 
+                            key={issueKey} 
                             issue={issue} 
                             index={issueIndex}
-                            expanded={expandedIssues.has(issueIndex)}
+                            expanded={expandedIssues.has(issueKey)}
                             onToggle={() => {
                               setExpandedIssues(prev => {
                                 const newSet = new Set(prev)
-                                if (newSet.has(issueIndex)) {
-                                  newSet.delete(issueIndex)
+                                if (newSet.has(issueKey)) {
+                                  newSet.delete(issueKey)
                                 } else {
-                                  newSet.add(issueIndex)
+                                  newSet.add(issueKey)
                                 }
                                 return newSet
                               })
@@ -519,19 +569,20 @@ export default function RunIssues() {
             <div className="space-y-2">
               {(data?.items ?? []).map((issue: Issue, idx: number) => {
                 const issueIndex = (page - 1) * size + idx
+                const issueKey = getIssueKey(issue, issueIndex)
                 return (
                   <IssueCard 
-                    key={idx} 
+                    key={issueKey} 
                     issue={issue} 
                     index={issueIndex}
-                    expanded={expandedIssues.has(issueIndex)}
+                    expanded={expandedIssues.has(issueKey)}
                     onToggle={() => {
                       setExpandedIssues(prev => {
                         const newSet = new Set(prev)
-                        if (newSet.has(issueIndex)) {
-                          newSet.delete(issueIndex)
+                        if (newSet.has(issueKey)) {
+                          newSet.delete(issueKey)
                         } else {
-                          newSet.add(issueIndex)
+                          newSet.add(issueKey)
                         }
                         return newSet
                       })
